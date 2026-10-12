@@ -357,7 +357,7 @@ def match_page(match_id):
     # "All matches" should return to the day the viewer sees this game on (their local day).
     kickoff = datetime.fromisoformat(m["kickoff"])
     back_date = (kickoff + timedelta(minutes=viewer_offset())).date().isoformat()
-    return render_template("match.html", m=m, detail=fetch_detail(m["external_id"]),
+    return render_template("match.html", m=m, detail=fetch_detail(m),
                            back_date=back_date)
 
 
@@ -365,7 +365,7 @@ def match_page(match_id):
 def partial_match(match_id):
     """HTML fragment the match page polls to refresh the score and goals."""
     m = match_or_404(match_id)
-    return render_template("_match_body.html", m=m, detail=fetch_detail(m["external_id"]))
+    return render_template("_match_body.html", m=m, detail=fetch_detail(m))
 
 
 init_db()  # also runs under gunicorn, so the tables always exist
