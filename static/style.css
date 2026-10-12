@@ -135,7 +135,16 @@ a.arrow:hover { background: var(--card); }
 .standings .tm { width: 100%; text-align: left; white-space: nowrap; }
 .standings .tm img { width: 20px; height: 20px; margin-right: 10px; object-fit: contain; vertical-align: middle; }
 .standings .pts { font-weight: 700; }
-
+.lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.lu h4 { margin: 0 0 8px; font-size: 1rem; }
+.lu h4 small { margin-left: 6px; color: var(--muted); font-weight: 500; }
+.lu h5 { margin: 14px 0 6px; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.players { margin: 0; padding: 0; list-style: none; }
+.players li { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.players li:last-child { border-bottom: 0; }
+.players .num { min-width: 24px; color: var(--muted); text-align: right; }
+.players.bench li { color: var(--muted); }
+.coach { margin: 10px 0 0; color: var(--muted); font-size: .9rem; }
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
   .shell { display: block; }
@@ -147,6 +156,7 @@ a.arrow:hover { background: var(--card); }
   .search { border-bottom: 1px solid var(--line); }
 }
 @media (max-width: 520px) {
+  .lineups { grid-template-columns: 1fr; }
   .top-row { gap: 20px; }
   .mlink { grid-template-columns: 58px minmax(0, 1fr) auto; }
   .tms { padding: 0 10px; }

@@ -92,6 +92,20 @@ def load_groups(sport, day, league=None, offset=0, live=False):
 def get_match(match_id):
     return get_db().execute(MATCH_SQL + " WHERE m.id = ?", (match_id,)).fetchone()
 
+def _lineup(team):
+    """Starting XI, bench, formation and coach for one side, from football-data.org's match data."""
+    team = team or {}
+
+    def players(items):
+        return [{"name": p.get("name") or "Unknown", "number": p.get("shirtNumber"),
+                 "position": p.get("position")} for p in items or []]
+
+    return {
+        "formation": team.get("formation"),
+        "coach": (team.get("coach") or {}).get("name"),
+        "starters": players(team.get("lineup")),
+        "bench": players(team.get("bench")),
+    }
 
 def fetch_detail(external_id):
     """Goal scorers and venue from football-data.org for one match, cached briefly.
@@ -129,7 +143,10 @@ def fetch_detail(external_id):
                 "kind": kind,
                 "side": "home" if (goal.get("team") or {}).get("id") == home_id else "away",
             })
+        lineups = {"home": _lineup(data.get("homeTeam")), "away": _lineup(data.get("awayTeam"))}
+        has_lineups = lineups["home"]["starters"] or lineups["away"]["starters"]
         detail = {
+            "lineups": lineups if has_lineups else None,
             "goals": goals,
             "venue": data.get("venue"),
             "referee": next(

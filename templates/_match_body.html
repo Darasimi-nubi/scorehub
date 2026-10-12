@@ -43,6 +43,33 @@
 </section>
 {% endif %}
 
+{% if m.sport == 'football' and detail and detail.lineups %}
+<section class="panel">
+  <h3>Line-ups</h3>
+  <div class="lineups">
+    {% for side, team in [('home', m.home), ('away', m.away)] %}
+    {% set lu = detail.lineups[side] %}
+    <div class="lu {{ side }}">
+      <h4>{{ team }}{% if lu.formation %} <small>{{ lu.formation }}</small>{% endif %}</h4>
+      <ol class="players">
+        {% for p in lu.starters %}
+        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
+        {% endfor %}
+      </ol>
+      {% if lu.bench %}
+      <h5>Substitutes</h5>
+      <ol class="players bench">
+        {% for p in lu.bench %}
+        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+      {% if lu.coach %}<p class="coach">Coach: {{ lu.coach }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 <section class="panel">
   <h3>Match info</h3>
   <dl class="info">
