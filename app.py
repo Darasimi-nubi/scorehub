@@ -16,6 +16,8 @@ load_env()  # reads FOOTBALL_DATA_KEY from the .env file, if there is one
 
 # Used for league tables (and goal scorers on paid plans).
 FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
+# Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
+API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
 
 app = Flask(__name__)
 
@@ -106,8 +108,14 @@ def _lineup(team):
         "starters": players(team.get("lineup")),
         "bench": players(team.get("bench")),
     }
+def fetch_detail(m):
+    """Goals, line-ups, venue and referee for a match row; API-Football if a key is set."""
+    if API_FOOTBALL_KEY and m["sport"] == "football":
+        import apifootball
+        return apifootball.fetch_detail(m, API_FOOTBALL_KEY)
+    return _fetch_detail_fd(m["external_id"])
 
-def fetch_detail(external_id):
+def fetch_detail_fd(external_id):
     """Goal scorers and venue from football-data.org for one match, cached briefly.
 
     Returns None when unavailable (no key, demo match, API error, or a plan that
