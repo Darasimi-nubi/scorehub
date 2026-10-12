@@ -43,6 +43,20 @@
 </section>
 {% endif %}
 
+{% if m.sport == 'football' and detail and detail.stats %}
+<section class="panel">
+  <h3>Match stats</h3>
+  {% for s in detail.stats %}
+  <div class="stat">
+    <div class="stat-head"><b>{{ s.home }}</b><span>{{ s.label }}</span><b>{{ s.away }}</b></div>
+    <div class="stat-bars">
+      <span class="bar {{ 'lead' if s.lead != 'away' }}" style="width: {{ s.home_pct }}%"></span>
+      <span class="bar {{ 'lead' if s.lead != 'home' }}" style="width: {{ s.away_pct }}%"></span>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 {% if m.sport == 'football' and detail and detail.lineups %}
 <section class="panel">
   <h3>Line-ups</h3>

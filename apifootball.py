@@ -143,9 +143,63 @@ def _lineups(items, home_id, away_id):
     return out if out["home"]["starters"] or out["away"]["starters"] else None
 
 
+FAIL = object()  # a request failed: keep whatever we had and retry later
+
+# (API-Football stat name, label shown on the page)
+STAT_ROWS = [
+    ("Ball Possession", "Possession"), ("expected_goals", "Expected goals (xG)"),
+    ("Total Shots", "Shots"), ("Shots on Goal", "Shots on target"),
+    ("Corner Kicks", "Corners"), ("Fouls", "Fouls"), ("Offsides", "Offsides"),
+    ("Yellow Cards", "Yellow cards"), ("Red Cards", "Red cards"),
+    ("Goalkeeper Saves", "Saves"), ("Passes %", "Pass accuracy"),
+]
+
+
+def _number(value):
+    try:
+        return float(str(value).replace("%", "")) if value is not None else 0.0
+    except ValueError:
+        return 0.0
+
+
+def _stats(items, home_id):
+    """Turn API-Football's two statistics lists into rows with bar widths for the page."""
+    sides = {"home": {}, "away": {}}
+    for item in items or []:
+        side = "home" if (item.get("team") or {}).get("id") == home_id else "away"
+        sides[side] = {r.get("type"): r.get("value") for r in item.get("statistics") or []}
+    rows = []
+    for key, label in STAT_ROWS:
+        hv, av = sides["home"].get(key), sides["away"].get(key)
+        if hv is None and av is None:
+            continue
+        h, a = _number(hv), _number(av)
+        total = h + a
+        rows.append({
+            "label": label,
+            "home": "-" if hv is None else hv, "away": "-" if av is None else av,
+            "home_pct": round(h / total * 100) if total else 50,
+            "away_pct": round(a / total * 100) if total else 50,
+            "lead": "home" if h > a else "away" if a > h else "",
+        })
+    return rows
+
+
+def _cached(ext, part, ttl, loader):
+    """Per-part cache so one match page never re-requests data that can't have changed."""
+    store = _detail_cache.setdefault(ext, {})
+    entry = store.get(part)
+    if entry and time.time() - entry[0] < ttl:
+        return entry[1]
+    value = loader()
+    if value is FAIL:
+        return entry[1] if entry else None
+    store[part] = (time.time(), value)
+    return value
+
+
 def fetch_detail(m, key):
-    """Goals, line-ups, venue and referee for one match row, or None when unavailable."""
-    ext = m["external_id"]
+    """Goals, stats, line-ups, venue and referee for one match row, or None when unavailable."""
     if m["status"] == "postponed":
         return None
     now = datetime.now(timezone.utc)
@@ -155,42 +209,51 @@ def fetch_detail(m, key):
         return None
     if kick - now > timedelta(hours=2):
         return None  # line-ups are only published about an hour before kickoff
-
-    ttl = {"live": 60, "finished": 3600}.get(m["status"], 300)
-    cached = _detail_cache.get(ext)
-    if cached and time.time() - cached[0] < ttl:
-        return cached[1]
-
-    detail = cached[1] if cached else None  # keep old data if a call fails
     fx = _find_fixture(m, key)
-    if fx:
-        fid, home_id = fx["fixture"]["id"], fx["teams"]["home"]["id"]
-        goals, lineups = None, None
-        if m["status"] in ("live", "finished"):
-            data = _get("/fixtures/events", key, fixture=fid)
-            if data is not None:
-                goals = []
-                for e in data.get("response", []):
-                    if e.get("type") != "Goal" or e.get("detail") == "Missed Penalty":
-                        continue
-                    t = e.get("time") or {}
-                    label = f"{t['elapsed']}'" if t.get("elapsed") is not None else ""
-                    if label and t.get("extra"):
-                        label = f"{t['elapsed']}+{t['extra']}'"
-                    goals.append({
-                        "minute": label,
-                        "player": (e.get("player") or {}).get("name") or "Unknown",
-                        "kind": {"Penalty": "pen", "Own Goal": "og"}.get(e.get("detail"), ""),
-                        "side": "home" if (e.get("team") or {}).get("id") == home_id else "away",
-                    })
+    if not fx:
+        return None
+
+    ext, status = m["external_id"], m["status"]
+    fid, home_id, away_id = fx["fixture"]["id"], fx["teams"]["home"]["id"], fx["teams"]["away"]["id"]
+    played = status in ("live", "finished")
+    final = 6 * 3600  # a finished match won't change, so keep it for hours
+
+    def load_goals():
+        data = _get("/fixtures/events", key, fixture=fid)
+        if data is None:
+            return FAIL
+        goals = []
+        for e in data.get("response", []):
+            if e.get("type") != "Goal" or e.get("detail") == "Missed Penalty":
+                continue
+            t = e.get("time") or {}
+            label = f"{t['elapsed']}'" if t.get("elapsed") is not None else ""
+            if label and t.get("extra"):
+                label = f"{t['elapsed']}+{t['extra']}'"
+            goals.append({
+                "minute": label,
+                "player": (e.get("player") or {}).get("name") or "Unknown",
+                "kind": {"Penalty": "pen", "Own Goal": "og"}.get(e.get("detail"), ""),
+                "side": "home" if (e.get("team") or {}).get("id") == home_id else "away",
+            })
+        return goals
+
+    def load_stats():
+        data = _get("/fixtures/statistics", key, fixture=fid)
+        return FAIL if data is None else _stats(data.get("response"), home_id)
+
+    def load_lineups():
         data = _get("/fixtures/lineups", key, fixture=fid)
-        if data is not None:
-            lineups = _lineups(data.get("response"), home_id, fx["teams"]["away"]["id"])
-        detail = {
-            "goals": goals if goals is not None else (detail or {}).get("goals", []),
-            "lineups": lineups if data is not None else (detail or {}).get("lineups"),
-            "venue": (fx["fixture"].get("venue") or {}).get("name"),
-            "referee": fx["fixture"].get("referee"),
-        }
-    _detail_cache[ext] = (time.time(), detail)
-    return detail
+        return FAIL if data is None else _lineups(data.get("response"), home_id, away_id)
+
+    goals = _cached(ext, "goals", final if status == "finished" else 90, load_goals) if played else []
+    stats = _cached(ext, "stats", final if status == "finished" else 180, load_stats) if played else []
+    lineups = _cached(ext, "lineups", 6 * 3600, load_lineups)
+    if not lineups:  # not published yet (or none for this league): look again in a few minutes
+        _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
+
+    return {
+        "goals": goals or [], "stats": stats or [], "lineups": lineups,
+        "venue": (fx["fixture"].get("venue") or {}).get("name"),
+        "referee": fx["fixture"].get("referee"),
+    }

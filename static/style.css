@@ -135,6 +135,15 @@ a.arrow:hover { background: var(--card); }
 .standings .tm { width: 100%; text-align: left; white-space: nowrap; }
 .standings .tm img { width: 20px; height: 20px; margin-right: 10px; object-fit: contain; vertical-align: middle; }
 .standings .pts { font-weight: 700; }
+.stat { margin-bottom: 14px; }
+.stat:last-child { margin-bottom: 0; }
+.stat-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; margin-bottom: 5px; }
+.stat-head b { font-weight: 700; }
+.stat-head b:last-child { text-align: right; }
+.stat-head span { color: var(--muted); font-size: .92rem; }
+.stat-bars { display: flex; gap: 4px; height: 6px; }
+.bar { border-radius: 3px; background: var(--line); }
+.bar.lead { background: var(--accent); }
 .lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .lu h4 { margin: 0 0 8px; font-size: 1rem; }
 .lu h4 small { margin-left: 6px; color: var(--muted); font-weight: 500; }
