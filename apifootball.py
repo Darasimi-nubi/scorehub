@@ -7,6 +7,7 @@ import difflib
 import re
 import time
 import unicodedata
+import html
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -38,6 +39,15 @@ _fixtures_cache = {}   # "YYYY-MM-DD" -> (fetched_at, [fixtures])
 _id_cache = {}         # our external_id -> API-Football fixture
 _detail_cache = {}     # our external_id -> (fetched_at, detail)
 
+def _unescape(obj):
+    """API-Football sends some names HTML-encoded (O&apos;Reilly); decode them."""
+    if isinstance(obj, str):
+        return html.unescape(obj)
+    if isinstance(obj, list):
+        return [_unescape(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _unescape(v) for k, v in obj.items()}
+    return obj
 
 def _get(path, key, **params):
     """GET with retries (some networks drop the secure connection) and a daily request budget."""
@@ -56,7 +66,7 @@ def _get(path, key, **params):
             if data.get("errors"):
                 print(f"api-football: {path} {params}: {data['errors']}")
                 return None
-            return data
+            return _unescape(data)
         except Exception as exc:
             print(f"api-football: {path} attempt {attempt + 1} failed: {exc}")
             time.sleep(1)
