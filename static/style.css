@@ -159,8 +159,8 @@ a.arrow:hover { background: var(--card); }
 .team-tag.away { bottom: 10px; right: 12px; flex-direction: row-reverse; }
 .pl { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 24%; transform: translate(-50%, -50%); }
 .shirt { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-weight: 700; font-size: .95rem; }
-.pl.home .shirt { background: #fff; color: #0d0f12; }
-.pl.away .shirt { background: #14171c; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
+.pl.home .shirt, .bp.home .shirt { background: #fff; color: #0d0f12; }
+.pl.away .shirt, .bp.away .shirt { background: #14171c; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
 .pname { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font-size: .72rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
 .shirt .ico { position: absolute; display: grid; place-items: center; min-width: 15px; height: 15px; border-radius: 50%; background: #fff; color: #0d0f12; font-size: 10px; font-style: normal; line-height: 1; }
 .shirt .ico small { font-size: 9px; font-weight: 700; }
@@ -170,6 +170,20 @@ a.arrow:hover { background: var(--card); }
 .shirt .card { position: absolute; top: -6px; right: -4px; width: 9px; height: 13px; border-radius: 2px; }
 .shirt .card.y { background: #f2d334; }
 .shirt .card.r { background: var(--live); }
+.subs, .benches { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
+.sub { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.sub-min { min-width: 40px; color: var(--muted); font-size: 1.02rem; }
+.sub-who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sub-line { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: .95rem; }
+.sub-line small { color: var(--muted); font-weight: 500; font-size: .78rem; }
+.arr { display: grid; place-items: center; flex: 0 0 17px; width: 17px; height: 17px; border-radius: 50%; color: #fff; font-style: normal; font-size: .72rem; font-weight: 700; }
+.arr.in { background: #22c55e; }
+.arr.out { background: var(--live); }
+.bp { display: flex; align-items: center; gap: 12px; padding: 7px 0; }
+.bp .who { display: flex; flex-direction: column; min-width: 0; }
+.bp .who b { font-weight: 600; line-height: 1.15; }
+.bp .who small { color: var(--muted); font-size: .8rem; }
+.shirt .on-badge { right: -5px; bottom: -4px; background: #22c55e; color: #fff; font-weight: 700; }
 .sub-on { margin-left: auto; color: #4ade80; font-size: .85rem; }
 .lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .lu h4 { margin: 0 0 8px; font-size: 1rem; }
@@ -194,6 +208,9 @@ a.arrow:hover { background: var(--card); }
 }
 @media (max-width: 520px) {
   .lineups { grid-template-columns: 1fr; }
+  .subs, .benches { gap: 4px 12px; }
+  .sub-min { min-width: 32px; font-size: .9rem; }
+  .sub-line, .bp .who b { font-size: .85rem; }
   .shirt { width: 28px; height: 28px; font-size: .82rem; }
   .pname { font-size: .62rem; }
   .pl { width: 26%; }

@@ -83,29 +83,61 @@
     {% endfor %}
   </div>
   {% endif %}
+  {% if not lineups.pitch %}
   <div class="lineups">
     {% for side, team in [('home', m.home), ('away', m.away)] %}
     {% set lu = lineups[side] %}
     <div class="lu {{ side }}">
-      {% if not lineups.pitch %}
       <h4>{{ team }}{% if lu.formation %} <small>{{ lu.formation }}</small>{% endif %}</h4>
       <ol class="players">
         {% for p in lu.starters %}
         <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
         {% endfor %}
       </ol>
-      {% else %}
-      <h4>{{ team }} <small>substitutes</small></h4>
-      {% endif %}
-      {% if lu.bench %}
-      {% if not lineups.pitch %}<h5>Substitutes</h5>{% endif %}
-      <ol class="players bench">
-        {% for p in lu.bench %}
-        {% set mk = detail.marks.get(p.id|string, {}) %}
-        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}{% if mk.on %} <span class="sub-on">&uarr; {{ mk.on }}</span>{% endif %}</li>
-        {% endfor %}
-      </ol>
-      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if detail.subs and (detail.subs.home or detail.subs.away) %}
+<section class="panel">
+  <h3>Substitutions</h3>
+  <div class="subs">
+    {% for side in ['home', 'away'] %}
+    <div class="subcol">
+      {% for s in detail.subs[side] %}
+      <div class="sub">
+        <span class="sub-min">{{ s.minute }}</span>
+        <span class="sub-who">
+          <span class="sub-line"><i class="arr in">&uarr;</i><small>{{ '#' ~ s['in'].number if s['in'].number is not none }}</small> {{ s['in'].name }}</span>
+          <span class="sub-line"><i class="arr out">&darr;</i><small>{{ '#' ~ s.out.number if s.out.number is not none }}</small> {{ s.out.name }}</span>
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h3>Substitute players</h3>
+  <div class="benches">
+    {% for side in ['home', 'away'] %}
+    {% set lu = lineups[side] %}
+    <div class="bcol">
+      {% for p in lu.bench %}
+      {% set mk = detail.marks.get(p.id|string, {}) %}
+      <div class="bp {{ side }}">
+        <span class="shirt">{{ p.number if p.number is not none else '' }}
+          {% if mk.red %}<i class="card r"></i>{% elif mk.yellow %}<i class="card y"></i>{% endif %}
+          {% if mk.goals %}<i class="ico goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
+          {% if mk.on %}<i class="ico on-badge" title="Came on {{ mk.on }}">&uarr;</i>{% endif %}
+        </span>
+        <span class="who"><b>{{ p.name }}</b>{% if p.position %}<small>{{ p.position }}</small>{% endif %}</span>
+      </div>
+      {% endfor %}
       {% if lu.coach %}<p class="coach">Coach: {{ lu.coach }}</p>{% endif %}
     </div>
     {% endfor %}

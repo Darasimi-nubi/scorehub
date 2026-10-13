@@ -223,6 +223,9 @@ def _place(starters, side):
     return True
 
 
+POSITIONS = {"G": "Goalkeeper", "D": "Defender", "M": "Midfielder", "F": "Forward"}
+
+
 def _lineups(items, home_id, away_id):
     out = {"home": None, "away": None}
 
@@ -230,7 +233,7 @@ def _lineups(items, home_id, away_id):
         return [{"id": (r.get("player") or {}).get("id"),
                  "name": (r.get("player") or {}).get("name") or "Unknown",
                  "number": (r.get("player") or {}).get("number"),
-                 "position": (r.get("player") or {}).get("pos"),
+                 "position": POSITIONS.get((r.get("player") or {}).get("pos"), (r.get("player") or {}).get("pos")),
                  "grid": (r.get("player") or {}).get("grid")} for r in rows or []]
 
     for item in items or []:
@@ -246,35 +249,47 @@ def _lineups(items, home_id, away_id):
     return out
 
 
-def _marks(events, lineups):
-    """What happened to each player (goals, cards, substituted off/on), keyed by player id."""
-    marks = {}
+def _analyse(events, lineups, home_id):
+    """Per-player marks (goals, cards, off/on) plus the substitutions list for each side."""
+    people = {str(p["id"]): p for s in ("home", "away") for p in lineups[s]["starters"] + lineups[s]["bench"]}
     starters = {str(p["id"]) for s in ("home", "away") for p in lineups[s]["starters"]}
     came_on = set()
+    marks, subs = {}, {"home": [], "away": []}
 
     def mark(pid):
         return marks.setdefault(str(pid), {"goals": 0, "og": 0, "yellow": 0, "red": 0, "off": None, "on": None})
+
+    def person(pid, raw):
+        p = people.get(str(pid)) or {}
+        return {"name": p.get("name") or raw.get("name") or "Unknown", "number": p.get("number")}
 
     for e in events:
         kind, detail = e.get("type"), e.get("detail") or ""
         t = e.get("time") or {}
         label = (f"{t['elapsed']}+{t['extra']}'" if t.get("extra") else f"{t['elapsed']}'") \
             if t.get("elapsed") is not None else ""
-        pid = (e.get("player") or {}).get("id")
+        order = (t.get("elapsed") or 0) * 100 + (t.get("extra") or 0)
+        pa = e.get("player") or {}
+        pid = pa.get("id")
         if kind == "Goal" and pid and detail != "Missed Penalty":
             mark(pid)["og" if detail == "Own Goal" else "goals"] += 1
         elif kind == "Card" and pid:
             mark(pid)["red" if "Red" in detail or "Second" in detail else "yellow"] = 1
         elif kind == "subst":
-            a, b = pid, (e.get("assist") or {}).get("id")
+            pb = e.get("assist") or {}
+            a, b = pa.get("id"), pb.get("id")
             if not a or not b:
                 continue
             # whoever started (or already came on) is the one leaving, whichever field the API puts them in
-            if str(b) in starters or b in came_on:
-                a, b = b, a
+            if str(b) in starters or str(b) in came_on:
+                a, b, pa, pb = b, a, pb, pa
             mark(a)["off"], mark(b)["on"] = label, label
-            came_on.add(b)
-    return marks
+            came_on.add(str(b))
+            side = "home" if (e.get("team") or {}).get("id") == home_id else "away"
+            subs[side].append({"minute": label, "order": order, "in": person(b, pb), "out": person(a, pa)})
+    for side in subs:
+        subs[side].sort(key=lambda s: s["order"])
+    return marks, subs
 
 
 FAIL = object()  # a request failed: keep whatever we had and retry later
@@ -387,9 +402,11 @@ def fetch_detail(m, key):
     if not lineups:  # not published yet (or none for this league): look again in a few minutes
         _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
 
+    marks, subs = _analyse((events or {}).get("events", []), lineups, home_id) if lineups \
+        else ({}, {"home": [], "away": []})
     return {
         "goals": (events or {}).get("goals", []), "stats": stats or [], "lineups": lineups,
-        "marks": _marks((events or {}).get("events", []), lineups) if lineups else {},
+        "marks": marks, "subs": subs,
         "venue": (fx["fixture"].get("venue") or {}).get("name"),
         "referee": fx["fixture"].get("referee"),
     }
