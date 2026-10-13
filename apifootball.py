@@ -15,8 +15,8 @@ import requests
 
 BASE = "https://v3.football.api-sports.io"
 # Free plan: 100 requests a day. On a paid plan, raise these with Railway variables.
-DAILY_LIMIT = int(os.environ.get("API_FOOTBALL_DAILY_LIMIT", "90"))   # everything combined
-LIVE_LIMIT = int(os.environ.get("API_FOOTBALL_LIVE_LIMIT", "65"))     # of which live-score refreshes
+DAILY_LIMIT = int(os.environ.get("API_FOOTBALL_DAILY_LIMIT", "95"))   # everything combined
+LIVE_LIMIT = int(os.environ.get("API_FOOTBALL_LIVE_LIMIT", "50"))     # of which live-score refreshes
 LIVE_TTL = int(os.environ.get("API_FOOTBALL_LIVE_TTL", "150"))        # seconds between live-score refreshes
 
 # football-data.org competition name (as stored in our database) -> API-Football league id
@@ -106,7 +106,8 @@ def _fixtures_for(day, key):
         return cached[1]
     data = _get("/fixtures", key, date=day)
     fixtures = data["response"] if data else (cached[1] if cached else [])
-    _fixtures_cache[day] = (time.time(), fixtures)
+    # a failed lookup is retried after a minute instead of being remembered for ten
+    _fixtures_cache[day] = (time.time() if data else time.time() - 540, fixtures)
     return fixtures
 
 
@@ -435,6 +436,16 @@ def _cached(ext, part, ttl, loader):
     return value
 
 
+def budget_used_up():
+    _roll_day()
+    return _calls["n"] >= DAILY_LIMIT
+
+
+def _notice(text):
+    return {"goals": [], "stats": [], "lineups": None, "marks": {}, "subs": {"home": [], "away": []},
+            "h2h": None, "timeline": [], "venue": None, "referee": None, "notice": text}
+
+
 def fetch_detail(m, key):
     """Goals, stats, line-ups, venue and referee for one match row, or None when unavailable."""
     if m["status"] == "postponed":
@@ -447,7 +458,10 @@ def fetch_detail(m, key):
     soon = kick - now <= timedelta(hours=2)  # line-ups only appear about an hour before kickoff
     fx = _find_fixture(m, key)
     if not fx:
-        return None
+        if budget_used_up():
+            return _notice("Match details are paused: today's data allowance from the stats provider "
+                           "is used up. They come back after midnight UTC (1 am in Lagos).")
+        return _notice("No detailed data is available for this match yet.")
 
     ext, status = m["external_id"], m["status"]
     fid, home_id, away_id = fx["fixture"]["id"], fx["teams"]["home"]["id"], fx["teams"]["away"]["id"]
@@ -485,8 +499,8 @@ def fetch_detail(m, key):
         data = _get("/fixtures/lineups", key, fixture=fid)
         return FAIL if data is None else _lineups(data.get("response"), home_id, away_id)
 
-    events = _cached(ext, "goals", final if status == "finished" else 90, load_goals) if played else None
-    stats = _cached(ext, "stats", final if status == "finished" else 180, load_stats) if played else []
+    events = _cached(ext, "goals", final if status == "finished" else 120, load_goals) if played else None
+    stats = _cached(ext, "stats", final if status == "finished" else 300, load_stats) if played else []
     lineups = None
     if soon:
         lineups = _cached(ext, "lineups", 6 * 3600, load_lineups)
@@ -509,4 +523,7 @@ def fetch_detail(m, key):
         "timeline": _timeline((events or {}).get("events", []), lineups, home_id, status) if events else [],
         "venue": (fx["fixture"].get("venue") or {}).get("name"),
         "referee": fx["fixture"].get("referee"),
+        "notice": ("Some details are paused: today's data allowance from the stats provider is used up. "
+                   "They come back after midnight UTC (1 am in Lagos).")
+                  if played and events is None and budget_used_up() else None,
     }
