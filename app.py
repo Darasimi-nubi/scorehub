@@ -5,7 +5,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 import requests
-from flask import Flask, Response, abort, g, render_template, request
+from flask import Flask, abort, g, jsonify, render_template, request, send_from_directory
 
 from config import load_env
 
@@ -18,8 +18,8 @@ load_env()  # reads FOOTBALL_DATA_KEY from the .env file, if there is one
 FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 # Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
-# Your AdSense publisher ID, e.g. pub-1234567890123456 (AdSense > Account > Settings).
-ADSENSE_PUB_ID = os.environ.get("ADSENSE_PUB_ID", "pub-XXXXXXXXXXXXXXXX")
+
+import push  # goal notifications (after load_env, so it sees the VAPID keys)
 
 app = Flask(__name__)
 
@@ -122,6 +122,8 @@ def decorate(rows):
         apifootball.overlay_live(football, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
     for r in football:
+        if r["status"] == "live" and (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 150 * 60:
+            r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live" from delayed data
         if r["status"] == "live" and not r.get("clock") and r.get("period") != "HT":
             r["period"], r["clock"] = estimate_clock(r["kickoff"], now)
     return rows
@@ -382,13 +384,6 @@ def index():
                            leagues=league_chips(sport))
 
 
-@app.route("/ads.txt")
-def ads_txt():
-    """Tells ad buyers that Google AdSense is authorised to sell ads on this site."""
-    line = f"google.com, {ADSENSE_PUB_ID}, DIRECT, f08c47fec0942fa0\n"
-    return Response(line, mimetype="text/plain")
-
-
 @app.route("/partial/matches")
 def partial_matches():
     """HTML fragment the page polls to refresh live scores."""
@@ -429,6 +424,57 @@ def partial_match(match_id):
     return render_template("_match_body.html", m=m, detail=fetch_detail(m))
 
 
+@app.route("/sw.js")
+def service_worker():
+    """Must be served from the site root so it can receive pushes for every page."""
+    resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/api/push/key")
+def push_key():
+    if not push.enabled():
+        abort(404)
+    return jsonify(key=push.VAPID_PUBLIC)
+
+
+@app.route("/api/push/subscribe", methods=["POST"])
+def push_subscribe():
+    if not push.enabled():
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    sub = body.get("subscription") or {}
+    keys = sub.get("keys") or {}
+    if not push.valid_endpoint(sub.get("endpoint", "")) or not keys.get("p256dh") or not keys.get("auth"):
+        abort(400)
+    matches = body.get("matches") if isinstance(body.get("matches"), list) else []
+    push.save({"endpoint": sub["endpoint"], "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}, matches)
+    return jsonify(ok=True)
+
+
+@app.route("/api/push/unsubscribe", methods=["POST"])
+def push_unsubscribe():
+    endpoint = (request.get_json(silent=True) or {}).get("endpoint", "")
+    if endpoint:
+        push.remove(endpoint)
+    return jsonify(ok=True)
+
+
+def _live_for_push():
+    with app.app_context():
+        return live_rows("football")
+
+
+def start_push():
+    """Background goal watcher (one per process; the site runs a single worker)."""
+    if not push.enabled():
+        print("push: VAPID keys not set, goal notifications are off")
+        return
+    import threading
+    threading.Thread(target=push.run, args=(_live_for_push,), daemon=True).start()
+
+
 init_db()  # also runs under gunicorn, so the tables always exist
 
 
@@ -439,6 +485,7 @@ def start_sync():
     if not FOOTBALL_DATA_KEY:
         return
     sync.clear_demo_data()
+    start_push()
     threading.Thread(
         target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),), daemon=True
     ).start()

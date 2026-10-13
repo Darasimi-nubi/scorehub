@@ -69,7 +69,10 @@
     var search = document.getElementById("q");
     var favBtn = document.getElementById("favToggle");
 
-    function saveFavs() { try { localStorage.setItem(KEY, JSON.stringify(favs)); } catch (e) {} }
+    function saveFavs() {
+      try { localStorage.setItem(KEY, JSON.stringify(favs)); } catch (e) {}
+      window.dispatchEvent(new Event("favs-changed"));
+    }
 
     // Kickoff times in the viewer's local time.
     function localiseTimes() {
@@ -149,7 +152,7 @@
     });
 
     localiseTimes(); applyFilters();
-    setInterval(refresh, 30000);
+    setInterval(refresh, 10000);
   })();
 </script>
 {% endblock %}

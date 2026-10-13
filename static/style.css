@@ -273,3 +273,9 @@ a.arrow:hover { background: var(--card); }
   .h2h-row { grid-template-columns: 1fr 44px 1fr; }
   .h2h-date { grid-column: 1 / -1; }
 }
+
+/* ---- goal alerts button ---- */
+.bell { margin-left: auto; background: rgba(255,255,255,.08); color: #ddd; border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.bell[hidden] { display: none; }
+.bell.bell-on { background: #f5a623; color: #1a1200; }
+@media (max-width: 520px) { .bell span { display: none; } .bell { padding: 8px 12px; } }

@@ -183,6 +183,10 @@ def overlay_live(rows, key):
     for r in candidates:
         fx = _best_match(r, fixtures)
         if not fx:
+            # the live feed is fresh and this match isn't in it: if it should be over by now, it is
+            since = (now - datetime.fromisoformat(r["kickoff"])).total_seconds() / 60
+            if r["status"] == "live" and since >= 110:
+                r["status"], r["period"], r["clock"] = "finished", "FT", None
             continue
         st = fx["fixture"]["status"]
         goals = fx.get("goals") or {}
