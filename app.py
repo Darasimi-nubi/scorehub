@@ -5,7 +5,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 import requests
-from flask import Flask, abort, g, render_template, request
+from flask import Flask, Response, abort, g, render_template, request
 
 from config import load_env
 
@@ -18,6 +18,8 @@ load_env()  # reads FOOTBALL_DATA_KEY from the .env file, if there is one
 FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 # Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
+# Your AdSense publisher ID, e.g. pub-1234567890123456 (AdSense > Account > Settings).
+ADSENSE_PUB_ID = os.environ.get("ADSENSE_PUB_ID", "pub-XXXXXXXXXXXXXXXX")
 
 app = Flask(__name__)
 
@@ -378,6 +380,13 @@ def index():
                            sport=sport, day=day, league=league, live=live,
                            live_count=live_count(sport), nav=day_nav(day, offset),
                            leagues=league_chips(sport))
+
+
+@app.route("/ads.txt")
+def ads_txt():
+    """Tells ad buyers that Google AdSense is authorised to sell ads on this site."""
+    line = f"google.com, {ADSENSE_PUB_ID}, DIRECT, f08c47fec0942fa0\n"
+    return Response(line, mimetype="text/plain")
 
 
 @app.route("/partial/matches")
