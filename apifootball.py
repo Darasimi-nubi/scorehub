@@ -197,13 +197,41 @@ def overlay_live(rows, key):
     return rows
 
 
+def _place(starters, side):
+    """Give each starter x/y percentages on one full pitch: home on the top half, away on the bottom.
+
+    API-Football's grid is "row:position", row 1 being the goalkeeper. Returns False when a
+    player has no grid (some leagues), so the page can fall back to a plain list.
+    """
+    rows = {}
+    try:
+        for p in starters:
+            row, col = (int(v) for v in p["grid"].split(":"))
+            rows.setdefault(row, []).append((col, p))
+    except (ValueError, AttributeError, TypeError):
+        return False
+    if not rows:
+        return False
+    lines = sorted(rows)
+    for i, row in enumerate(lines):
+        half_y = 7 + (i / (len(lines) - 1) * 37 if len(lines) > 1 else 0)  # 7% (keeper) .. 44% (striker)
+        players = sorted(rows[row], key=lambda cp: cp[0])
+        for k, (_, p) in enumerate(players):
+            x = 50 if len(players) == 1 else 13 + k / (len(players) - 1) * 74
+            p["x"] = round(100 - x if side == "home" else x, 1)  # home faces down, so mirror left/right
+            p["y"] = round(half_y if side == "home" else 100 - half_y, 1)
+    return True
+
+
 def _lineups(items, home_id, away_id):
     out = {"home": None, "away": None}
 
     def players(rows):
-        return [{"name": (r.get("player") or {}).get("name") or "Unknown",
+        return [{"id": (r.get("player") or {}).get("id"),
+                 "name": (r.get("player") or {}).get("name") or "Unknown",
                  "number": (r.get("player") or {}).get("number"),
-                 "position": (r.get("player") or {}).get("pos")} for r in rows or []]
+                 "position": (r.get("player") or {}).get("pos"),
+                 "grid": (r.get("player") or {}).get("grid")} for r in rows or []]
 
     for item in items or []:
         side = "home" if (item.get("team") or {}).get("id") == home_id else "away"
@@ -211,7 +239,42 @@ def _lineups(items, home_id, away_id):
                      "starters": players(item.get("startXI")), "bench": players(item.get("substitutes"))}
     empty = {"formation": None, "coach": None, "starters": [], "bench": []}
     out = {k: v or empty for k, v in out.items()}
-    return out if out["home"]["starters"] or out["away"]["starters"] else None
+    if not (out["home"]["starters"] or out["away"]["starters"]):
+        return None
+    out["pitch"] = bool(out["home"]["starters"] and out["away"]["starters"]) and \
+        _place(out["home"]["starters"], "home") and _place(out["away"]["starters"], "away")
+    return out
+
+
+def _marks(events, lineups):
+    """What happened to each player (goals, cards, substituted off/on), keyed by player id."""
+    marks = {}
+    starters = {str(p["id"]) for s in ("home", "away") for p in lineups[s]["starters"]}
+    came_on = set()
+
+    def mark(pid):
+        return marks.setdefault(str(pid), {"goals": 0, "og": 0, "yellow": 0, "red": 0, "off": None, "on": None})
+
+    for e in events:
+        kind, detail = e.get("type"), e.get("detail") or ""
+        t = e.get("time") or {}
+        label = (f"{t['elapsed']}+{t['extra']}'" if t.get("extra") else f"{t['elapsed']}'") \
+            if t.get("elapsed") is not None else ""
+        pid = (e.get("player") or {}).get("id")
+        if kind == "Goal" and pid and detail != "Missed Penalty":
+            mark(pid)["og" if detail == "Own Goal" else "goals"] += 1
+        elif kind == "Card" and pid:
+            mark(pid)["red" if "Red" in detail or "Second" in detail else "yellow"] = 1
+        elif kind == "subst":
+            a, b = pid, (e.get("assist") or {}).get("id")
+            if not a or not b:
+                continue
+            # whoever started (or already came on) is the one leaving, whichever field the API puts them in
+            if str(b) in starters or b in came_on:
+                a, b = b, a
+            mark(a)["off"], mark(b)["on"] = label, label
+            came_on.add(b)
+    return marks
 
 
 FAIL = object()  # a request failed: keep whatever we had and retry later
@@ -293,8 +356,9 @@ def fetch_detail(m, key):
         data = _get("/fixtures/events", key, fixture=fid)
         if data is None:
             return FAIL
+        events = data.get("response", [])
         goals = []
-        for e in data.get("response", []):
+        for e in events:
             if e.get("type") != "Goal" or e.get("detail") == "Missed Penalty":
                 continue
             t = e.get("time") or {}
@@ -307,7 +371,7 @@ def fetch_detail(m, key):
                 "kind": {"Penalty": "pen", "Own Goal": "og"}.get(e.get("detail"), ""),
                 "side": "home" if (e.get("team") or {}).get("id") == home_id else "away",
             })
-        return goals
+        return {"goals": goals, "events": events}
 
     def load_stats():
         data = _get("/fixtures/statistics", key, fixture=fid)
@@ -317,14 +381,15 @@ def fetch_detail(m, key):
         data = _get("/fixtures/lineups", key, fixture=fid)
         return FAIL if data is None else _lineups(data.get("response"), home_id, away_id)
 
-    goals = _cached(ext, "goals", final if status == "finished" else 90, load_goals) if played else []
+    events = _cached(ext, "goals", final if status == "finished" else 90, load_goals) if played else None
     stats = _cached(ext, "stats", final if status == "finished" else 180, load_stats) if played else []
     lineups = _cached(ext, "lineups", 6 * 3600, load_lineups)
     if not lineups:  # not published yet (or none for this league): look again in a few minutes
         _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
 
     return {
-        "goals": goals or [], "stats": stats or [], "lineups": lineups,
+        "goals": (events or {}).get("goals", []), "stats": stats or [], "lineups": lineups,
+        "marks": _marks((events or {}).get("events", []), lineups) if lineups else {},
         "venue": (fx["fixture"].get("venue") or {}).get("name"),
         "referee": fx["fixture"].get("referee"),
     }

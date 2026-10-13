@@ -57,24 +57,52 @@
   {% endfor %}
 </section>
 {% endif %}
+
 {% if m.sport == 'football' and detail and detail.lineups %}
+{% set lineups = detail.lineups %}
 <section class="panel">
   <h3>Line-ups</h3>
+  {% if lineups.pitch %}
+  <div class="pitch">
+    <div class="pitch-lines"><span class="halfway"></span><span class="centre"></span><span class="box box-t"></span><span class="box box-b"></span></div>
+    <div class="team-tag home">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}<b>{{ lineups.home.formation or '' }}</b></div>
+    <div class="team-tag away">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}<b>{{ lineups.away.formation or '' }}</b></div>
+    {% for side in ['home', 'away'] %}
+    {% for p in lineups[side].starters %}
+    {% set mk = detail.marks.get(p.id|string, {}) %}
+    <div class="pl {{ side }}" style="left: {{ p.x }}%; top: {{ p.y }}%">
+      <span class="shirt">{{ p.number if p.number is not none else '' }}
+        {% if mk.red %}<i class="card r" title="Red card"></i>{% elif mk.yellow %}<i class="card y" title="Yellow card"></i>{% endif %}
+        {% if mk.goals %}<i class="ico goal" title="Goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
+        {% if mk.og %}<i class="ico og" title="Own goal">&#9917;</i>{% endif %}
+        {% if mk.off %}<i class="ico off" title="Substituted off {{ mk.off }}">&darr;</i>{% endif %}
+      </span>
+      <span class="pname">{{ p.name }}</span>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="lineups">
     {% for side, team in [('home', m.home), ('away', m.away)] %}
-    {% set lu = detail.lineups[side] %}
+    {% set lu = lineups[side] %}
     <div class="lu {{ side }}">
+      {% if not lineups.pitch %}
       <h4>{{ team }}{% if lu.formation %} <small>{{ lu.formation }}</small>{% endif %}</h4>
       <ol class="players">
         {% for p in lu.starters %}
         <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
         {% endfor %}
       </ol>
+      {% else %}
+      <h4>{{ team }} <small>substitutes</small></h4>
+      {% endif %}
       {% if lu.bench %}
-      <h5>Substitutes</h5>
+      {% if not lineups.pitch %}<h5>Substitutes</h5>{% endif %}
       <ol class="players bench">
         {% for p in lu.bench %}
-        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
+        {% set mk = detail.marks.get(p.id|string, {}) %}
+        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}{% if mk.on %} <span class="sub-on">&uarr; {{ mk.on }}</span>{% endif %}</li>
         {% endfor %}
       </ol>
       {% endif %}
@@ -84,6 +112,7 @@
   </div>
 </section>
 {% endif %}
+
 <section class="panel">
   <h3>Match info</h3>
   <dl class="info">

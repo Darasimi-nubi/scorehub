@@ -135,6 +135,7 @@ a.arrow:hover { background: var(--card); }
 .standings .tm { width: 100%; text-align: left; white-space: nowrap; }
 .standings .tm img { width: 20px; height: 20px; margin-right: 10px; object-fit: contain; vertical-align: middle; }
 .standings .pts { font-weight: 700; }
+
 .stat { margin-bottom: 14px; }
 .stat:last-child { margin-bottom: 0; }
 .stat-head { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; margin-bottom: 5px; }
@@ -144,6 +145,32 @@ a.arrow:hover { background: var(--card); }
 .stat-bars { display: flex; gap: 4px; height: 6px; }
 .bar { border-radius: 3px; background: var(--line); }
 .bar.lead { background: var(--accent); }
+.pitch { position: relative; width: 100%; max-width: 560px; margin: 0 auto 18px; aspect-ratio: 5 / 7; overflow: hidden; border-radius: 14px;
+  background: repeating-linear-gradient(180deg, #1f5a33 0, #1f5a33 9.09%, #236638 9.09%, #236638 18.18%); }
+.pitch-lines span { position: absolute; border: 2px solid rgba(255, 255, 255, .28); }
+.pitch-lines .halfway { left: 0; right: 0; top: 50%; border-width: 2px 0 0; }
+.pitch-lines .centre { left: 50%; top: 50%; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; }
+.pitch-lines .box { left: 22%; right: 22%; height: 15%; }
+.pitch-lines .box.box-t { top: -2px; border-top: 0; }
+.pitch-lines .box.box-b { bottom: -2px; border-bottom: 0; }
+.team-tag { position: absolute; display: flex; align-items: center; gap: 6px; font-size: .78rem; color: rgba(255, 255, 255, .85); }
+.team-tag img { width: 24px; height: 24px; object-fit: contain; }
+.team-tag.home { top: 10px; left: 12px; }
+.team-tag.away { bottom: 10px; right: 12px; flex-direction: row-reverse; }
+.pl { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 24%; transform: translate(-50%, -50%); }
+.shirt { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-weight: 700; font-size: .95rem; }
+.pl.home .shirt { background: #fff; color: #0d0f12; }
+.pl.away .shirt { background: #14171c; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
+.pname { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font-size: .72rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+.shirt .ico { position: absolute; display: grid; place-items: center; min-width: 15px; height: 15px; border-radius: 50%; background: #fff; color: #0d0f12; font-size: 10px; font-style: normal; line-height: 1; }
+.shirt .ico small { font-size: 9px; font-weight: 700; }
+.shirt .goal { top: -6px; left: -6px; }
+.shirt .og { top: -6px; left: -6px; background: var(--live); color: #fff; }
+.shirt .off { right: -5px; bottom: -4px; background: var(--live); color: #fff; font-weight: 700; }
+.shirt .card { position: absolute; top: -6px; right: -4px; width: 9px; height: 13px; border-radius: 2px; }
+.shirt .card.y { background: #f2d334; }
+.shirt .card.r { background: var(--live); }
+.sub-on { margin-left: auto; color: #4ade80; font-size: .85rem; }
 .lineups { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .lu h4 { margin: 0 0 8px; font-size: 1rem; }
 .lu h4 small { margin-left: 6px; color: var(--muted); font-weight: 500; }
@@ -154,6 +181,7 @@ a.arrow:hover { background: var(--card); }
 .players .num { min-width: 24px; color: var(--muted); text-align: right; }
 .players.bench li { color: var(--muted); }
 .coach { margin: 10px 0 0; color: var(--muted); font-size: .9rem; }
+
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
   .shell { display: block; }
@@ -166,6 +194,10 @@ a.arrow:hover { background: var(--card); }
 }
 @media (max-width: 520px) {
   .lineups { grid-template-columns: 1fr; }
+  .shirt { width: 28px; height: 28px; font-size: .82rem; }
+  .pname { font-size: .62rem; }
+  .pl { width: 26%; }
+  .pitch { aspect-ratio: 5 / 8; }
   .top-row { gap: 20px; }
   .mlink { grid-template-columns: 58px minmax(0, 1fr) auto; }
   .tms { padding: 0 10px; }
