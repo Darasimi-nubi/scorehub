@@ -420,8 +420,26 @@ def partial_match(match_id):
     return render_template("_match_body.html", m=m, detail=fetch_detail(m))
 
 
+init_db()  # also runs under gunicorn, so the tables always exist
+
+
+def start_sync():
+    """Run the live-score sync in a background thread (used online, where there's one process)."""
+    import threading
+    import sync
+    if not FOOTBALL_DATA_KEY:
+        return
+    sync.clear_demo_data()
+    threading.Thread(
+        target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),), daemon=True
+    ).start()
+
+
+if os.environ.get("RUN_SYNC") == "1":
+    start_sync()
+
+
 if __name__ == "__main__":
-    init_db()
     if not FOOTBALL_DATA_KEY:
         print("Note: FOOTBALL_DATA_KEY not found (.env file or terminal). League tables will be unavailable.")
     app.run(debug=True)
