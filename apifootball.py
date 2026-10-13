@@ -4,16 +4,20 @@ The free plan allows 100 requests a day and only yesterday/today/tomorrow, so
 everything here is cached and a daily budget stops us going over.
 """
 import difflib
+import html
+import os
 import re
 import time
 import unicodedata
-import html
 from datetime import datetime, timedelta, timezone
 
 import requests
 
 BASE = "https://v3.football.api-sports.io"
-DAILY_LIMIT = 90  # stay under the free plan's 100 requests a day
+# Free plan: 100 requests a day. On a paid plan, raise these with Railway variables.
+DAILY_LIMIT = int(os.environ.get("API_FOOTBALL_DAILY_LIMIT", "90"))   # everything combined
+LIVE_LIMIT = int(os.environ.get("API_FOOTBALL_LIVE_LIMIT", "65"))     # of which live-score refreshes
+LIVE_TTL = int(os.environ.get("API_FOOTBALL_LIVE_TTL", "150"))        # seconds between live-score refreshes
 
 # football-data.org competition name (as stored in our database) -> API-Football league id
 LEAGUE_IDS = {
@@ -34,10 +38,12 @@ ALIASES = {
 }
 STOP = {"fc", "cf", "afc", "ac", "sc", "cd", "club", "the", "de", "ca"}
 
-_calls = {"day": None, "n": 0}
+_calls = {"day": None, "n": 0, "live": 0}
+_live = {"at": 0.0, "ok_at": 0.0, "rows": []}  # last live-scores list
 _fixtures_cache = {}   # "YYYY-MM-DD" -> (fetched_at, [fixtures])
 _id_cache = {}         # our external_id -> API-Football fixture
 _detail_cache = {}     # our external_id -> (fetched_at, detail)
+
 
 def _unescape(obj):
     """API-Football sends some names HTML-encoded (O&apos;Reilly); decode them."""
@@ -49,11 +55,16 @@ def _unescape(obj):
         return {k: _unescape(v) for k, v in obj.items()}
     return obj
 
-def _get(path, key, **params):
-    """GET with retries (some networks drop the secure connection) and a daily request budget."""
+
+def _roll_day():
     today = datetime.now(timezone.utc).date()
     if _calls["day"] != today:
-        _calls.update(day=today, n=0)
+        _calls.update(day=today, n=0, live=0)
+
+
+def _get(path, key, **params):
+    """GET with retries (some networks drop the secure connection) and a daily request budget."""
+    _roll_day()
     if _calls["n"] >= DAILY_LIMIT:
         print("api-football: daily request budget used up")
         return None
@@ -99,16 +110,12 @@ def _fixtures_for(day, key):
     return fixtures
 
 
-def _find_fixture(m, key):
-    """Match one of our rows to an API-Football fixture by league, kickoff time and team names."""
-    cached = _id_cache.get(m["external_id"])
-    if cached:
-        return cached
+def _best_match(m, fixtures):
+    """Pick the API-Football fixture for one of our rows by league, kickoff time and team names."""
     kick = datetime.fromisoformat(m["kickoff"])
     lid = LEAGUE_IDS.get(m["league"])
-    best, best_score = None, 0.0
     candidates = []
-    for f in _fixtures_for(kick.astimezone(timezone.utc).date().isoformat(), key):
+    for f in fixtures:
         if lid and f["league"]["id"] != lid:
             continue
         if abs(f["fixture"]["timestamp"] - kick.timestamp()) > 20 * 60:
@@ -116,14 +123,78 @@ def _find_fixture(m, key):
         score = (_similar(m["home"], f["teams"]["home"]["name"]) +
                  _similar(m["away"], f["teams"]["away"]["name"])) / 2
         candidates.append((score, f))
-    for score, f in candidates:
-        if score > best_score:
-            best, best_score = f, score
-    ok = best is not None and (best_score >= 0.7 or (lid and len(candidates) == 1 and best_score >= 0.3))
-    if ok:
+    if not candidates:
+        return None
+    best_score, best = max(candidates, key=lambda c: c[0])
+    ok = best_score >= 0.7 or (lid and len(candidates) == 1 and best_score >= 0.3)
+    return best if ok else None
+
+
+def _find_fixture(m, key):
+    cached = _id_cache.get(m["external_id"])
+    if cached:
+        return cached
+    kick = datetime.fromisoformat(m["kickoff"])
+    best = _best_match(m, _fixtures_for(kick.astimezone(timezone.utc).date().isoformat(), key))
+    if best:
         _id_cache[m["external_id"]] = best
-        return best
-    return None
+    return best
+
+
+# ---------- real-time scores ----------
+PERIODS = {"1H": "1H", "2H": "2H", "HT": "HT", "ET": "ET", "BT": "ET", "P": "PEN", "LIVE": "1H",
+           "INT": "HT", "SUSP": "HT"}
+
+
+def live_fixtures(key):
+    """Everything in play right now, in ONE request, shared by every visitor for LIVE_TTL seconds.
+
+    Returns (fixtures, fresh). fresh is False when the list is old (budget used up or API down),
+    in which case callers should not trust it.
+    """
+    _roll_day()
+    now = time.time()
+    if now - _live["at"] >= LIVE_TTL and _calls["live"] < LIVE_LIMIT:
+        _live["at"] = now  # set first, so a failing API isn't hammered
+        data = _get("/fixtures", key, live="all")
+        if data is not None:
+            _calls["live"] += 1
+            _live.update(ok_at=now, rows=data.get("response", []))
+    return _live["rows"], now - _live["ok_at"] < LIVE_TTL * 3
+
+
+def _maybe_live(r, now):
+    """Could this row be in play right now, even if our (delayed) data hasn't caught up?"""
+    if r["status"] not in ("scheduled", "live"):
+        return False
+    since = (now - datetime.fromisoformat(r["kickoff"])).total_seconds() / 60
+    return -2 <= since <= 140
+
+
+def overlay_live(rows, key):
+    """Update football rows (dicts) in place with real-time status, score and minute where known."""
+    now = datetime.now(timezone.utc)
+    candidates = [r for r in rows if _maybe_live(r, now)]
+    if not candidates:
+        return rows
+    fixtures, fresh = live_fixtures(key)
+    if not fresh:
+        return rows
+    for r in candidates:
+        fx = _best_match(r, fixtures)
+        if not fx:
+            continue
+        st = fx["fixture"]["status"]
+        goals = fx.get("goals") or {}
+        r["status"] = "live"
+        r["home_score"], r["away_score"] = goals.get("home"), goals.get("away")
+        r["period"] = PERIODS.get(st.get("short"), "1H")
+        elapsed, extra = st.get("elapsed"), st.get("extra")
+        if r["period"] == "HT" or elapsed is None:
+            r["clock"] = None
+        else:
+            r["clock"] = f"{elapsed}+{extra}'" if extra else f"{elapsed}'"
+    return rows
 
 
 def _lineups(items, home_id, away_id):

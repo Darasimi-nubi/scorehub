@@ -73,10 +73,64 @@ def load_groups(sport, day, league=None, offset=0, live=False):
     start = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc) - timedelta(minutes=offset)
     end = start + timedelta(days=1)
     if live:
-        sql, params = MATCH_SQL + " WHERE m.status = 'live'", []
+        rows = live_rows(sport, league)
     else:
         sql = MATCH_SQL + " WHERE m.kickoff >= ? AND m.kickoff < ?"
         params = [start.isoformat(), end.isoformat()]
+        if sport in ("football", "basketball"):
+            sql += " AND l.sport = ?"
+            params.append(sport)
+        if league:
+            sql += " AND l.name = ?"
+            params.append(league)
+        sql += " ORDER BY l.sport, l.name, m.kickoff"
+        rows = decorate(get_db().execute(sql, params).fetchall())
+
+    groups = OrderedDict()
+    for row in rows:
+        groups.setdefault((row["sport"], row["league"], row["country"]), []).append(row)
+    return groups
+
+
+def estimate_clock(kickoff, now):
+    """Match minute worked out from kickoff time, for when no live feed is available."""
+    mins = int((now - datetime.fromisoformat(kickoff)).total_seconds() // 60)
+    if mins < 0:
+        return None, None
+    if mins <= 45:
+        return "1H", f"{max(mins, 1)}'"
+    if mins <= 47:
+        return "1H", "45+'"
+    if mins <= 62:
+        return "HT", None  # 15-minute break
+    minute = mins - 15
+    return "2H", f"{minute}'" if minute <= 90 else "90+'"
+
+
+def decorate(rows):
+    """Turn rows into dicts and fix up live matches.
+
+    Real-time status, score and minute come from API-Football when a key is set; otherwise
+    (or when its budget is used up) the minute is estimated from the kickoff time.
+    """
+    rows = [dict(r) for r in rows]
+    football = [r for r in rows if r["sport"] == "football"]
+    if API_FOOTBALL_KEY and football:
+        import apifootball
+        apifootball.overlay_live(football, API_FOOTBALL_KEY)
+    now = datetime.now(timezone.utc)
+    for r in football:
+        if r["status"] == "live" and not r.get("clock") and r.get("period") != "HT":
+            r["period"], r["clock"] = estimate_clock(r["kickoff"], now)
+    return rows
+
+
+def live_rows(sport, league=None):
+    """Matches in play right now, including ones our delayed data still lists as 'scheduled'."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sql = MATCH_SQL + """ WHERE (m.status = 'live'
+                           OR (m.status = 'scheduled' AND m.kickoff >= ? AND m.kickoff <= ?))"""
+    params = [(now - timedelta(minutes=140)).isoformat(), (now + timedelta(minutes=2)).isoformat()]
     if sport in ("football", "basketball"):
         sql += " AND l.sport = ?"
         params.append(sport)
@@ -84,15 +138,14 @@ def load_groups(sport, day, league=None, offset=0, live=False):
         sql += " AND l.name = ?"
         params.append(league)
     sql += " ORDER BY l.sport, l.name, m.kickoff"
-
-    groups = OrderedDict()
-    for row in get_db().execute(sql, params):
-        groups.setdefault((row["sport"], row["league"], row["country"]), []).append(row)
-    return groups
+    rows = decorate(get_db().execute(sql, params).fetchall())
+    return [r for r in rows if r["status"] == "live"]
 
 
 def get_match(match_id):
-    return get_db().execute(MATCH_SQL + " WHERE m.id = ?", (match_id,)).fetchone()
+    row = get_db().execute(MATCH_SQL + " WHERE m.id = ?", (match_id,)).fetchone()
+    return decorate([row])[0] if row else None
+
 
 def _lineup(team):
     """Starting XI, bench, formation and coach for one side, from football-data.org's match data."""
@@ -108,6 +161,8 @@ def _lineup(team):
         "starters": players(team.get("lineup")),
         "bench": players(team.get("bench")),
     }
+
+
 def fetch_detail(m):
     """Goals, line-ups, venue and referee for a match row; API-Football if a key is set."""
     if API_FOOTBALL_KEY and m["sport"] == "football":
@@ -115,7 +170,8 @@ def fetch_detail(m):
         return apifootball.fetch_detail(m, API_FOOTBALL_KEY)
     return _fetch_detail_fd(m["external_id"])
 
-def fetch_detail_fd(external_id):
+
+def _fetch_detail_fd(external_id):
     """Goal scorers and venue from football-data.org for one match, cached briefly.
 
     Returns None when unavailable (no key, demo match, API error, or a plan that
@@ -297,11 +353,7 @@ def day_nav(day, offset=0, span=7):
 
 
 def live_count(sport):
-    sql, params = "SELECT COUNT(*) FROM matches m JOIN leagues l ON l.id = m.league_id WHERE m.status = 'live'", []
-    if sport in ("football", "basketball"):
-        sql += " AND l.sport = ?"
-        params.append(sport)
-    return get_db().execute(sql, params).fetchone()[0]
+    return len(live_rows(sport))
 
 
 def badge_hue(name):
@@ -368,26 +420,8 @@ def partial_match(match_id):
     return render_template("_match_body.html", m=m, detail=fetch_detail(m))
 
 
-init_db()  # also runs under gunicorn, so the tables always exist
-
-
-def start_sync():
-    """Run the live-score sync in a background thread (used online, where there's one process)."""
-    import threading
-    import sync
-    if not FOOTBALL_DATA_KEY:
-        return
-    sync.clear_demo_data()
-    threading.Thread(
-        target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),), daemon=True
-    ).start()
-
-
-if os.environ.get("RUN_SYNC") == "1":
-    start_sync()
-
-
 if __name__ == "__main__":
+    init_db()
     if not FOOTBALL_DATA_KEY:
         print("Note: FOOTBALL_DATA_KEY not found (.env file or terminal). League tables will be unavailable.")
     app.run(debug=True)
