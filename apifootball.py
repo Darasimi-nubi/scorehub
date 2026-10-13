@@ -292,6 +292,90 @@ def _analyse(events, lineups, home_id):
     return marks, subs
 
 
+def _timeline(events, lineups, home_id, status):
+    """Chronological match events (goals, cards, subs, VAR) with running score and HT / FT dividers."""
+    starters, came_on = set(), set()
+    if lineups:
+        starters = {str(p["id"]) for s in ("home", "away") for p in lineups[s]["starters"]}
+    rows, score = [], [0, 0]
+    def when(e):
+        t = e.get("time") or {}
+        return (t.get("elapsed") or 0) * 100 + (t.get("extra") or 0)
+    for e in sorted(events or [], key=when):
+        kind, detail = e.get("type"), e.get("detail") or ""
+        t = e.get("time") or {}
+        if t.get("elapsed") is None:
+            continue
+        label = f"{t['elapsed']}+{t['extra']}'" if t.get("extra") else f"{t['elapsed']}'"
+        order = t["elapsed"] * 100 + (t.get("extra") or 0)
+        side = "home" if (e.get("team") or {}).get("id") == home_id else "away"
+        pa, pb = e.get("player") or {}, e.get("assist") or {}
+        row = {"order": order, "elapsed": t["elapsed"], "minute": label, "side": side,
+               "kind": "", "player": pa.get("name") or "", "other": "", "score": "", "note": ""}
+        if kind == "Goal":
+            if detail == "Missed Penalty":
+                row.update(kind="pen-miss", note="Missed penalty")
+            else:
+                score[0 if side == "home" else 1] += 1
+                row.update(kind="goal", other=pb.get("name") or "", score=f"{score[0]} - {score[1]}",
+                           note={"Penalty": "PEN", "Own Goal": "OG"}.get(detail, ""))
+        elif kind == "Card":
+            row["kind"] = "red" if ("Red" in detail or "Second" in detail) else "yellow"
+        elif kind == "subst":
+            a, b = pa, pb
+            if str(b.get("id")) in starters or str(b.get("id")) in came_on:
+                a, b = b, a
+            came_on.add(str(b.get("id")))
+            row.update(kind="sub", player=b.get("name") or "", other=a.get("name") or "")
+        elif kind == "Var":
+            row.update(kind="var", note=detail)
+        else:
+            continue
+        if row["player"] or row["kind"] == "var":
+            rows.append(row)
+    rows.sort(key=lambda r: r["order"])
+
+    out, ht_done = [], False
+    def divider(label):
+        out.append({"kind": "divider", "minute": label, "score": f"{score[0]} - {score[1]}"})
+    for r in rows:
+        if not ht_done and r["elapsed"] > 45:
+            ht_done = True
+            # score at the break = score after the last first-half event
+            first = [x for x in out if x.get("score")]
+            if first:
+                score_ht = first[-1]["score"]
+            else:
+                score_ht = "0 - 0"
+            out.append({"kind": "divider", "minute": "HT", "score": score_ht})
+        out.append(r)
+    if status == "finished":
+        if not ht_done:
+            first = [x for x in out if x.get("score")]
+            out.append({"kind": "divider", "minute": "HT", "score": first[-1]["score"] if first else "0 - 0"})
+        divider("FT")
+    return out
+
+
+def _h2h(items, home_id, away_id):
+    """Past meetings of the two clubs, newest first, plus a win / draw / win tally."""
+    done = {"FT", "AET", "PEN"}
+    meetings, tally = [], {"home": 0, "draw": 0, "away": 0}
+    for f in sorted(items or [], key=lambda f: f["fixture"]["date"], reverse=True):
+        if (f["fixture"].get("status") or {}).get("short") not in done:
+            continue
+        hg, ag = f["goals"]["home"], f["goals"]["away"]
+        if hg is None or ag is None:
+            continue
+        winner = f["teams"]["home"]["id"] if hg > ag else f["teams"]["away"]["id"] if ag > hg else None
+        tally["draw" if winner is None else "home" if winner == home_id else "away"] += 1
+        meetings.append({"date": f["fixture"]["date"][:10], "league": (f.get("league") or {}).get("name", ""),
+                         "home": f["teams"]["home"]["name"], "away": f["teams"]["away"]["name"],
+                         "hs": hg, "as": ag, "home_won": winner == f["teams"]["home"]["id"],
+                         "away_won": winner == f["teams"]["away"]["id"]})
+    return {"tally": tally, "meetings": meetings[:10]} if meetings else None
+
+
 FAIL = object()  # a request failed: keep whatever we had and retry later
 
 # (API-Football stat name, label shown on the page)
@@ -356,8 +440,7 @@ def fetch_detail(m, key):
     # the free plan only covers yesterday .. tomorrow (UTC)
     if abs((kick.astimezone(timezone.utc).date() - now.date()).days) > 1:
         return None
-    if kick - now > timedelta(hours=2):
-        return None  # line-ups are only published about an hour before kickoff
+    soon = kick - now <= timedelta(hours=2)  # line-ups only appear about an hour before kickoff
     fx = _find_fixture(m, key)
     if not fx:
         return None
@@ -365,6 +448,8 @@ def fetch_detail(m, key):
     ext, status = m["external_id"], m["status"]
     fid, home_id, away_id = fx["fixture"]["id"], fx["teams"]["home"]["id"], fx["teams"]["away"]["id"]
     played = status in ("live", "finished")
+    if not soon:
+        played = False
     final = 6 * 3600  # a finished match won't change, so keep it for hours
 
     def load_goals():
@@ -398,15 +483,26 @@ def fetch_detail(m, key):
 
     events = _cached(ext, "goals", final if status == "finished" else 90, load_goals) if played else None
     stats = _cached(ext, "stats", final if status == "finished" else 180, load_stats) if played else []
-    lineups = _cached(ext, "lineups", 6 * 3600, load_lineups)
-    if not lineups:  # not published yet (or none for this league): look again in a few minutes
-        _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
+    lineups = None
+    if soon:
+        lineups = _cached(ext, "lineups", 6 * 3600, load_lineups)
+        if not lineups:  # not published yet (or none for this league): look again in a few minutes
+            _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
+
+    def load_h2h():
+        data = _get("/fixtures/headtohead", key, h2h=f"{home_id}-{away_id}", last=10)
+        return FAIL if data is None else _h2h(data.get("response"), home_id, away_id)
+
+    h2h = _cached(ext, "h2h", 12 * 3600, load_h2h)
+    if not h2h:  # failed or none: don't ask again for half an hour
+        _detail_cache[ext]["h2h"] = (time.time() - 12 * 3600 + 1800, None)
 
     marks, subs = _analyse((events or {}).get("events", []), lineups, home_id) if lineups \
         else ({}, {"home": [], "away": []})
     return {
         "goals": (events or {}).get("goals", []), "stats": stats or [], "lineups": lineups,
-        "marks": marks, "subs": subs,
+        "marks": marks, "subs": subs, "h2h": h2h,
+        "timeline": _timeline((events or {}).get("events", []), lineups, home_id, status) if events else [],
         "venue": (fx["fixture"].get("venue") or {}).get("name"),
         "referee": fx["fixture"].get("referee"),
     }

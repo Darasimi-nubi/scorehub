@@ -21,12 +21,27 @@
     });
   }
   // Refresh the score every 30 seconds without reloading.
+  // Tabs: remember the chosen one across the 30-second refresh.
+  var currentTab = null;
+  function showTab(key) {
+    var box = document.getElementById("match");
+    var btn = box.querySelector('.tabbtn[data-tab="' + key + '"]');
+    if (!btn) return;
+    currentTab = key;
+    box.querySelectorAll(".tabbtn").forEach(function (b) { b.classList.toggle("tab-active", b === btn); });
+    box.querySelectorAll(".tabpane").forEach(function (p) { p.classList.toggle("active", p.dataset.pane === key); });
+  }
+  document.getElementById("match").addEventListener("click", function (e) {
+    var b = e.target.closest(".tabbtn");
+    if (b) showTab(b.dataset.tab);
+  });
   function refresh() {
     fetch("{{ url_for('partial_match', match_id=m.id) }}")
       .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
       .then(function (html) {
         document.getElementById("match").innerHTML = html;
         localiseTimes();
+        if (currentTab) showTab(currentTab);
       })
       .catch(function () {});
   }
