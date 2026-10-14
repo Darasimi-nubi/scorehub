@@ -19,6 +19,7 @@ FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 # Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
 
+import livescore  # LiveScore API (optional football source)
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 
 app = Flask(__name__)
@@ -26,7 +27,7 @@ app = Flask(__name__)
 _detail_cache = {}  # external_id -> (fetched_at, detail dict or None)
 DETAIL_TTL = 60     # seconds; keeps API usage low however many people watch a match
 
-SPORTS = ("football", "basketball", "hockey")
+SPORTS = ("football", "basketball", "hockey", "tennis", "cricket")
 
 MATCH_SQL = """
     SELECT m.*, l.name AS league, l.country, l.sport,
@@ -132,14 +133,18 @@ def decorate(rows):
     """
     rows = [dict(r) for r in rows]
     football = [r for r in rows if r["sport"] == "football"]
-    if API_FOOTBALL_KEY and football:
+    if football and livescore.enabled():
+        livescore.overlay_live(football)
+        livescore.settle_past(football)
+    elif API_FOOTBALL_KEY and football:
         import apifootball
         apifootball.overlay_live(football, API_FOOTBALL_KEY)
         apifootball.settle_past(football, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
     for r in rows:
-        if r["sport"] != "football" and r["status"] == "live" and \
-                (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 4.5 * 3600:
+        limit = {"basketball": 4.5, "hockey": 4.5, "tennis": 9}.get(r["sport"])  # hours; cricket Tests last days
+        if limit and r["status"] == "live" and \
+                (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > limit * 3600:
             r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live"
     for r in football:
         if r["status"] == "live" and (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 150 * 60:
@@ -233,9 +238,11 @@ def fd_h2h(external_id):
 
 def fetch_detail(m):
     """Goals, line-ups, venue and referee for a match row; API-Football if a key is set."""
-    if API_FOOTBALL_KEY and m["sport"] == "football":
+    if m["sport"] == "football" and (API_FOOTBALL_KEY or livescore.enabled()):
         import apifootball
-        detail = apifootball.fetch_detail(m, API_FOOTBALL_KEY)
+        detail = livescore.fetch_detail(m) if livescore.enabled() else None
+        if detail is None and API_FOOTBALL_KEY:  # LiveScore not set up, or it can't find this match
+            detail = apifootball.fetch_detail(m, API_FOOTBALL_KEY)
         if m["status"] != "postponed" and not (detail and detail.get("h2h")):
             h2h = fd_h2h(m["external_id"])
             if h2h:
@@ -558,7 +565,8 @@ def start_sync():
     start_push()
     threading.Thread(
         target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),),
-        kwargs={"extras": (sync.EspnBasketballProvider(), sync.EspnHockeyProvider())}, daemon=True
+        kwargs={"extras": (sync.EspnBasketballProvider(), sync.EspnHockeyProvider(),
+                                       sync.EspnTennisProvider(), sync.EspnCricketProvider())}, daemon=True
     ).start()
 
 
