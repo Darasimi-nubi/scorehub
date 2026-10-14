@@ -21,6 +21,7 @@ LIVE_TTL = int(os.environ.get("LIVESCORE_LIVE_TTL", "30"))        # seconds betw
 DAILY_LIMIT = int(os.environ.get("LIVESCORE_DAILY_LIMIT", "0"))   # 0 = no cap
 
 _calls = {"day": None, "n": 0}
+_down = {"until": 0.0}   # after repeated network failures, pause calls briefly so pages never hang
 _live = {"at": 0.0, "ok_at": 0.0, "rows": []}
 _day_cache = {}   # "YYYY-MM-DD" -> (fetched_at, [matches])
 _id_cache = {}    # our external_id -> LiveScore match dict
@@ -47,13 +48,15 @@ def _get(target, **params):
     if budget_used_up():
         print("livescore: daily request budget used up")
         return None
+    if time.time() < _down["until"]:
+        return None
     url = target if target.startswith("http") else BASE + target
     params = {k: v for k, v in params.items() if v is not None}
     params.setdefault("key", KEY)
     params.setdefault("secret", SECRET)
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            resp = requests.get(url, params=params, headers={"Connection": "close"}, timeout=15)
+            resp = requests.get(url, params=params, headers={"Connection": "close"}, timeout=8)
             _calls["n"] += 1
             body = resp.json()
             if not body.get("success", False):
@@ -63,6 +66,7 @@ def _get(target, **params):
         except Exception as exc:
             print(f"livescore: {url.split('/api-client/')[-1]} attempt {attempt + 1} failed: {exc}")
             time.sleep(1)
+    _down["until"] = time.time() + 60  # network trouble: stop trying for a minute
     return None
 
 
@@ -103,7 +107,7 @@ def _history(day):
     if hit and time.time() - hit[0] < 600:
         return hit[1]
     found = []
-    for page in range(1, 9):
+    for page in range(1, 5):
         data = _get("matches/history.json", **{"from": day, "to": day, "page": page})
         chunk = (data or {}).get("match") or []
         found += chunk
