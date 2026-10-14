@@ -180,21 +180,23 @@ class EspnBasketballProvider:
     URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/{slug}/scoreboard"
 
     def fetch_range(self, days_back, days_ahead):
+        """One request per league per day: ESPN's plain ?dates=YYYYMMDD form (ranges get a 400)."""
         today = datetime.now(timezone.utc).date()
-        span = f"{(today - timedelta(days=days_back)):%Y%m%d}-{(today + timedelta(days=days_ahead)):%Y%m%d}"
-        out = []
+        found = {}
         for slug, league, country in self.LEAGUES:
-            try:
-                resp = requests.get(self.URL.format(slug=slug), params={"dates": span, "limit": 300},
-                                    headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
-                resp.raise_for_status()
-                for event in resp.json().get("events", []):
-                    m = self._convert(event, league, country)
-                    if m:
-                        out.append(m)
-            except Exception as exc:
-                print(f"basketball sync ({slug}) failed: {exc}")
-        return out
+            for offset in range(-min(days_back, 3), days_ahead + 1):
+                day = today + timedelta(days=offset)
+                try:
+                    resp = requests.get(self.URL.format(slug=slug), params={"dates": f"{day:%Y%m%d}"},
+                                        headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
+                    resp.raise_for_status()
+                    for event in resp.json().get("events", []):
+                        m = self._convert(event, league, country)
+                        if m:
+                            found[m["external_id"]] = m
+                except Exception as exc:
+                    print(f"basketball sync ({slug} {day}) failed: {exc}")
+        return list(found.values())
 
     def fetch_matches(self):
         return self.fetch_range(1, 1)
