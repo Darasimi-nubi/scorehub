@@ -3,7 +3,7 @@
 Providers all expose fetch_matches() and return a list of dicts shaped like:
     {
       "external_id": "abc123",
-      "sport": "football" | "basketball" | "hockey",
+      "sport": "football" | "basketball" | "hockey" | "tennis" | "cricket",
       "league": "Premier League", "country": "England",
       "home": "Arsenal", "away": "Chelsea",
       "kickoff": "2026-10-09T19:00:00+00:00",
@@ -279,6 +279,162 @@ class EspnHockeyProvider(EspnProvider):
     PREFIX = "P"
 
 
+class EspnTennisProvider(EspnProvider):
+    """ATP and WTA singles. A tennis 'score' is sets won; live matches show the set and its games."""
+
+    SPORT = "tennis"
+    LEAGUES = [("atp", "ATP", "Men"), ("wta", "WTA", "Women")]
+    EVERY = 60
+
+    def fetch_range(self, days_back, days_ahead):
+        today = datetime.now(timezone.utc).date()
+        found = {}
+        for slug, tour, _ in self.LEAGUES:
+            for offset in range(-min(days_back, 2), min(days_ahead, 4) + 1):
+                day = today + timedelta(days=offset)
+                try:
+                    resp = requests.get(self.URL.format(sport="tennis", slug=slug), params={"dates": f"{day:%Y%m%d}"},
+                                        headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
+                    resp.raise_for_status()
+                    for event in resp.json().get("events", []):
+                        for group in event.get("groupings") or []:
+                            if "singles" not in ((group.get("grouping") or {}).get("displayName") or "").lower():
+                                continue
+                            for comp in group.get("competitions") or []:
+                                m = self._convert_match(comp, event.get("name") or tour, tour)
+                                if m:
+                                    found[m["external_id"]] = m
+                except Exception as exc:
+                    print(f"tennis sync ({slug} {day}) failed: {exc}")
+        return list(found.values())
+
+    def fetch_matches(self):
+        return self.fetch_range(1, 1)
+
+    def _convert_match(self, comp, tournament, tour):
+        players = sorted(comp.get("competitors") or [], key=lambda c: c.get("order", 0))
+        if len(players) != 2:
+            return None
+        a, b = players
+        st = comp.get("status") or {}
+        kind = st.get("type") or {}
+        name, state = kind.get("name", ""), kind.get("state", "pre")
+        status = "scheduled"
+        if name in ("STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_CANCELLED", "STATUS_SUSPENDED"):
+            status = "postponed"
+        elif state == "post":
+            status = "finished"
+        elif state == "in":
+            status = "live"
+
+        def sets_won(p):
+            return sum(1 for ls in p.get("linescores") or [] if ls.get("winner"))
+
+        def pname(p):
+            ath = p.get("athlete") or {}
+            return ath.get("displayName") or ath.get("shortName") or "TBD"
+
+        def flag(p):
+            return ((p.get("athlete") or {}).get("flag") or {}).get("href")
+
+        played = status in ("live", "finished")
+        period = clock = None
+        if status == "finished":
+            period = "FT"
+        elif status == "live":
+            sets_a, sets_b = a.get("linescores") or [], b.get("linescores") or []
+            n = max(len(sets_a), len(sets_b))
+            period = f"Set {n}" if n else "Live"
+            if n:
+                ga = int(sets_a[-1].get("value", 0)) if sets_a else 0
+                gb = int(sets_b[-1].get("value", 0)) if sets_b else 0
+                clock = f"{ga}-{gb}"
+        kickoff = datetime.fromisoformat((comp.get("date") or comp.get("startDate")).replace("Z", "+00:00"))
+        if kickoff.tzinfo is None:
+            kickoff = kickoff.replace(tzinfo=timezone.utc)
+        return {
+            "external_id": f"espn-tennis-{comp['id']}", "sport": "tennis",
+            "league": tournament, "country": tour,
+            "home": pname(a), "away": pname(b), "home_crest": flag(a), "away_crest": flag(b),
+            "kickoff": kickoff.astimezone(timezone.utc).isoformat(), "status": status,
+            "home_score": sets_won(a) if played else None, "away_score": sets_won(b) if played else None,
+            "period": period, "clock": clock,
+        }
+
+
+class EspnCricketProvider(EspnProvider):
+    """Cricket from ESPN's 'scoreboard header' feed, which lists every active series in one request.
+
+    A cricket 'score' is text such as "311 & 172/9 (53 ov)", stored as-is.
+    """
+
+    SPORT = "cricket"
+    EVERY = 60
+    URL = "https://site.web.api.espn.com/apis/v2/scoreboard/header"
+
+    @staticmethod
+    def _tidy(score):
+        score = re.sub(r",\s*target \d+", "", score or "")
+        return re.sub(r"\((\d+(?:\.\d)?)/\d+ ov\)", r"(\1 ov)", score).strip()
+
+    def fetch_range(self, days_back, days_ahead):
+        found = {}
+        today = datetime.now(timezone.utc).date()
+        days = [None] if days_back <= 1 and days_ahead <= 1 else \
+            [None] + [today + timedelta(days=d) for d in range(-2, 4)]
+        for day in days:
+            params = {"sport": "cricket", "lang": "en", "region": "us"}
+            if day:
+                params["dates"] = f"{day:%Y%m%d}"
+            try:
+                resp = requests.get(self.URL, params=params, headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
+                resp.raise_for_status()
+                for sport in resp.json().get("sports", []):
+                    for league in sport.get("leagues", []):
+                        for event in league.get("events", []):
+                            m = self._convert(event, league.get("name") or "Cricket", None)
+                            if m:
+                                found[m["external_id"]] = m
+            except Exception as exc:
+                print(f"cricket sync ({day}) failed: {exc}")
+        return list(found.values())
+
+    def fetch_matches(self):
+        return self.fetch_range(1, 1)
+
+    def _convert(self, event, league, country):
+        teams = {c.get("homeAway"): c for c in event.get("competitors") or []}
+        if "home" not in teams or "away" not in teams:
+            return None
+        full = (event.get("fullStatus") or {}).get("type") or {}
+        state = event.get("status") or full.get("state") or "pre"
+        description = (full.get("description") or "").lower()
+        status, period, clock = "scheduled", None, None
+        if any(w in description for w in ("postponed", "cancel")):
+            status = "postponed"
+        elif state == "post":
+            status, period = "finished", "Result"
+        elif state == "in":
+            status, clock = "live", "Live"
+            n = event.get("period") or 0
+            if n:
+                period = f"Day {n}" if "test" in (event.get("name") or "").lower() else f"Inns {n}"
+        kickoff = datetime.fromisoformat(event["date"].replace("Z", "+00:00"))
+        if kickoff.tzinfo is None:
+            kickoff = kickoff.replace(tzinfo=timezone.utc)
+        played = status in ("live", "finished")
+        return {
+            "external_id": f"espn-cricket-{event['id']}", "sport": "cricket",
+            "league": league, "country": country,
+            "home": teams["home"].get("displayName") or "TBD", "away": teams["away"].get("displayName") or "TBD",
+            "home_crest": teams["home"].get("logo"), "away_crest": teams["away"].get("logo"),
+            "kickoff": kickoff.astimezone(timezone.utc).isoformat(), "status": status,
+            "home_score": (self._tidy(teams["home"].get("score")) or None) if played else None,
+            "away_score": (self._tidy(teams["away"].get("score")) or None) if played else None,
+            "period": period, "clock": clock,
+        }
+
+
 def upsert(conn, m):
     conn.execute(
         "INSERT OR IGNORE INTO leagues (sport, name, country) VALUES (?, ?, ?)",
@@ -332,6 +488,9 @@ def run_forever(provider, interval=30):
         time.sleep(interval)
 
 
+_last_run = {}
+
+
 def run_football(provider, interval=30, full_every=1800, days_back=7, days_ahead=7, extras=()):
     """Live scores every `interval` seconds, plus a full -7/+7 day refresh every 30 minutes.
 
@@ -344,6 +503,9 @@ def run_football(provider, interval=30, full_every=1800, days_back=7, days_ahead
         for p in [provider, *extras]:
             if p is None:
                 continue
+            if not full and time.time() - _last_run.get(id(p), 0) < getattr(p, "EVERY", 0):
+                continue  # slower sources are polled less often
+            _last_run[id(p)] = time.time()
             try:  # one provider failing must not stop the others
                 n = save_matches(p.fetch_range(days_back, days_ahead) if full else p.fetch_matches())
                 print(f"{'full' if full else 'live'} sync ({type(p).__name__}): {n} matches")

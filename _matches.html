@@ -19,7 +19,7 @@
         <div class="t">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="" loading="lazy">{% endif %}<span>{{ m.home }}</span></div>
         <div class="t">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="" loading="lazy">{% endif %}<span>{{ m.away }}</span></div>
       </div>
-      <div class="sc">
+      <div class="sc{{ ' txt' if m.sport == 'cricket' }}">
         <b>{{ m.home_score if m.home_score is not none else '' }}</b>
         <b>{{ m.away_score if m.away_score is not none else '' }}</b>
       </div>

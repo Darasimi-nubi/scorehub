@@ -294,3 +294,11 @@ a.arrow:hover { background: var(--card); }
 .bp .rate { margin-left: auto; }
 .pname small { color: #b9bec7; font-weight: 700; margin-right: 2px; }
 @media (max-width: 520px) { .shirt { width: 32px; height: 32px; } .rate { font-size: 10px; min-width: 24px; } }
+
+/* ---- more sports ---- */
+.pills { overflow-x: auto; scrollbar-width: none; }
+.pills a { white-space: nowrap; }
+.sc.txt { font-size: .85rem; max-width: 46vw; }
+.sc.txt b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cscore { font-style: normal; font-size: .9rem; font-weight: 600; color: var(--muted); }
+.scoreboard.live .cscore { color: var(--live); }
