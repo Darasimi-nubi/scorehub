@@ -19,7 +19,6 @@ FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 # Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
 
-import livescore  # LiveScore API (optional football source)
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 
 app = Flask(__name__)
@@ -133,10 +132,7 @@ def decorate(rows):
     """
     rows = [dict(r) for r in rows]
     football = [r for r in rows if r["sport"] == "football"]
-    if football and livescore.enabled():
-        livescore.overlay_live(football)
-        livescore.settle_past(football)
-    elif API_FOOTBALL_KEY and football:
+    if API_FOOTBALL_KEY and football:
         import apifootball
         apifootball.overlay_live(football, API_FOOTBALL_KEY)
         apifootball.settle_past(football, API_FOOTBALL_KEY)
@@ -238,11 +234,9 @@ def fd_h2h(external_id):
 
 def fetch_detail(m):
     """Goals, line-ups, venue and referee for a match row; API-Football if a key is set."""
-    if m["sport"] == "football" and (API_FOOTBALL_KEY or livescore.enabled()):
+    if API_FOOTBALL_KEY and m["sport"] == "football":
         import apifootball
-        detail = livescore.fetch_detail(m) if livescore.enabled() else None
-        if detail is None and API_FOOTBALL_KEY:  # LiveScore not set up, or it can't find this match
-            detail = apifootball.fetch_detail(m, API_FOOTBALL_KEY)
+        detail = apifootball.fetch_detail(m, API_FOOTBALL_KEY)
         if m["status"] != "postponed" and not (detail and detail.get("h2h")):
             h2h = fd_h2h(m["external_id"])
             if h2h:
