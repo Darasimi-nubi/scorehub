@@ -231,6 +231,22 @@ def _events(data, lineups, status):
     marks, subs, goals, rows = {}, {"home": [], "away": []}, [], []
     score = [0, 0]
 
+    by_name = {p["name"].strip().lower(): p for p in people.values()}
+
+    def who(x):
+        """The feed gives a player as a name string or as an object: accept both."""
+        if isinstance(x, dict):
+            d = dict(x)
+        elif isinstance(x, str) and x.strip():
+            d = {"name": x.strip()}
+        else:
+            return {}
+        if not d.get("id"):
+            known = by_name.get(str(d.get("name", "")).strip().lower())
+            if known:
+                d["id"] = known["id"]
+        return d
+
     def mark(pid):
         return marks.setdefault(str(pid), {"goals": 0, "og": 0, "yellow": 0, "red": 0, "off": None, "on": None})
 
@@ -243,7 +259,7 @@ def _events(data, lineups, status):
         kind = e.get("event")
         label, elapsed, order = _minute(e.get("time", 0))
         side = "home" if e.get("is_home") else "away"
-        p, info = e.get("player") or {}, e.get("info") or {}
+        p, info = who(e.get("player")), who(e.get("info"))
         row = {"order": order, "elapsed": elapsed, "minute": label, "side": side, "kind": "",
                "player": p.get("name") or "", "other": "", "score": "", "note": ""}
         if kind in ("GOAL", "GOAL_PENALTY", "OWN_GOAL"):
@@ -335,7 +351,16 @@ def _h2h(data, home_id, away_id):
 
 
 def fetch_detail(m):
-    """Same shape as apifootball.fetch_detail, or None when this match can't be found."""
+    """Same shape as apifootball.fetch_detail, or None when this match can't be found or parsed."""
+    try:
+        return _fetch_detail(m)
+    except Exception as exc:  # never let a surprise in the feed break the match page
+        import traceback
+        print(f"livescore: detail for {m.get('external_id')} failed: {exc}\n{traceback.format_exc()[-600:]}")
+        return None
+
+
+def _fetch_detail(m):
     if m["status"] == "postponed":
         return None
     kick = datetime.fromisoformat(m["kickoff"])
