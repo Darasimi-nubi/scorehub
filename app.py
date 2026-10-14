@@ -122,6 +122,10 @@ def decorate(rows):
         apifootball.overlay_live(football, API_FOOTBALL_KEY)
         apifootball.settle_past(football, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
+    for r in rows:
+        if r["sport"] == "basketball" and r["status"] == "live" and \
+                (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 4.5 * 3600:
+            r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live"
     for r in football:
         if r["status"] == "live" and (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 150 * 60:
             r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live" from delayed data
@@ -538,7 +542,8 @@ def start_sync():
     sync.clear_demo_data()
     start_push()
     threading.Thread(
-        target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),), daemon=True
+        target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),),
+        kwargs={"extras": (sync.EspnBasketballProvider(),)}, daemon=True
     ).start()
 
 

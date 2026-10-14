@@ -169,6 +169,93 @@ class FootballDataProvider:
         }
 
 
+class EspnBasketballProvider:
+    """Basketball scores from ESPN's public scoreboard feed (no key needed, one request per league).
+
+    NBA and WNBA by default. It is an unofficial feed, so if ESPN changes it the basketball
+    section may go quiet while football carries on.
+    """
+
+    LEAGUES = [("nba", "NBA", "USA"), ("wnba", "WNBA", "USA")]
+    URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/{slug}/scoreboard"
+
+    def fetch_range(self, days_back, days_ahead):
+        today = datetime.now(timezone.utc).date()
+        span = f"{(today - timedelta(days=days_back)):%Y%m%d}-{(today + timedelta(days=days_ahead)):%Y%m%d}"
+        out = []
+        for slug, league, country in self.LEAGUES:
+            try:
+                resp = requests.get(self.URL.format(slug=slug), params={"dates": span, "limit": 300},
+                                    headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
+                resp.raise_for_status()
+                for event in resp.json().get("events", []):
+                    m = self._convert(event, league, country)
+                    if m:
+                        out.append(m)
+            except Exception as exc:
+                print(f"basketball sync ({slug}) failed: {exc}")
+        return out
+
+    def fetch_matches(self):
+        return self.fetch_range(1, 1)
+
+    @staticmethod
+    def _period_label(n):
+        if not n:
+            return None
+        return f"Q{n}" if n <= 4 else ("OT" if n == 5 else f"{n - 4}OT")
+
+    def _convert(self, event, league, country):
+        comp = (event.get("competitions") or [{}])[0]
+        teams = {c.get("homeAway"): c for c in comp.get("competitors") or []}
+        if "home" not in teams or "away" not in teams:
+            return None
+        st = event.get("status") or {}
+        kind = st.get("type") or {}
+        name, state = kind.get("name", ""), kind.get("state", "pre")
+        period_n = st.get("period") or 0
+        status, period, clock = "scheduled", None, None
+        if name in ("STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_CANCELLED", "STATUS_SUSPENDED"):
+            status = "postponed"
+        elif state == "post":
+            status, period = "finished", "FT" if period_n <= 4 else self._period_label(period_n)
+        elif state == "in":
+            status = "live"
+            if name == "STATUS_HALFTIME":
+                period = "HT"
+            else:
+                period = self._period_label(period_n)
+                clock = "End" if name == "STATUS_END_PERIOD" else (st.get("displayClock") or None)
+
+        def score(team):
+            try:
+                return int(team.get("score"))
+            except (TypeError, ValueError):
+                return None
+
+        def team_name(team):
+            t = team.get("team") or {}
+            return t.get("shortDisplayName") or t.get("displayName") or t.get("name") or "TBD"
+
+        kickoff = datetime.fromisoformat(event["date"].replace("Z", "+00:00"))
+        if kickoff.tzinfo is None:
+            kickoff = kickoff.replace(tzinfo=timezone.utc)
+        played = status in ("live", "finished")
+        return {
+            "external_id": f"espn-{event['id']}",
+            "sport": "basketball",
+            "league": league, "country": country,
+            "home": team_name(teams["home"]), "away": team_name(teams["away"]),
+            "home_crest": (teams["home"].get("team") or {}).get("logo"),
+            "away_crest": (teams["away"].get("team") or {}).get("logo"),
+            "kickoff": kickoff.astimezone(timezone.utc).isoformat(),
+            "status": status,
+            "home_score": score(teams["home"]) if played else None,
+            "away_score": score(teams["away"]) if played else None,
+            "period": period, "clock": clock,
+        }
+
+
 def upsert(conn, m):
     conn.execute(
         "INSERT OR IGNORE INTO leagues (sport, name, country) VALUES (?, ?, ?)",
@@ -222,7 +309,7 @@ def run_forever(provider, interval=30):
         time.sleep(interval)
 
 
-def run_football(provider, interval=30, full_every=1800, days_back=7, days_ahead=7):
+def run_football(provider, interval=30, full_every=1800, days_back=7, days_ahead=7, extras=()):
     """Live scores every `interval` seconds, plus a full -7/+7 day refresh every 30 minutes.
 
     Per minute this uses about 2 requests, plus about 4 more once every 30 minutes,
@@ -230,15 +317,17 @@ def run_football(provider, interval=30, full_every=1800, days_back=7, days_ahead
     """
     last_full = 0.0
     while True:
-        try:
-            if time.time() - last_full >= full_every:
-                n = save_matches(provider.fetch_range(days_back, days_ahead))
-                last_full = time.time()
-                print(f"full sync: {n} matches ({days_back} days back, {days_ahead} ahead)")
-            else:
-                print(f"live sync: {save_matches(provider.fetch_matches())} matches")
-        except Exception as exc:  # keep the worker alive on provider errors
-            print("sync failed:", exc)
+        full = time.time() - last_full >= full_every
+        for p in [provider, *extras]:
+            if p is None:
+                continue
+            try:  # one provider failing must not stop the others
+                n = save_matches(p.fetch_range(days_back, days_ahead) if full else p.fetch_matches())
+                print(f"{'full' if full else 'live'} sync ({type(p).__name__}): {n} matches")
+            except Exception as exc:
+                print(f"sync failed ({type(p).__name__}):", exc)
+        if full:
+            last_full = time.time()
         time.sleep(interval)
 
 
