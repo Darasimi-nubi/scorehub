@@ -28,6 +28,7 @@
       <a class="{{ 'on' if sp == 'all' }}" href="{{ url_for('index') }}">All</a>
       <a class="{{ 'on' if sp == 'football' }}" href="{{ url_for('index', sport='football') }}">Football</a>
       <a class="{{ 'on' if sp == 'basketball' }}" href="{{ url_for('index', sport='basketball') }}">Basketball</a>
+      <a class="{{ 'on' if sp == 'hockey' }}" href="{{ url_for('index', sport='hockey') }}">Hockey</a>
     </div>
   </header>
   {% block body %}{% endblock %}
