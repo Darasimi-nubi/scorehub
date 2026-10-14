@@ -120,10 +120,13 @@ def decorate(rows):
     if API_FOOTBALL_KEY and football:
         import apifootball
         apifootball.overlay_live(football, API_FOOTBALL_KEY)
+        apifootball.settle_past(football, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
     for r in football:
         if r["status"] == "live" and (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 150 * 60:
             r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live" from delayed data
+        if r["status"] == "scheduled" and (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 240 * 60:
+            r["status"], r["period"] = "finished", "FT"  # long over; the feed just hasn't caught up
         if r["status"] == "live" and not r.get("clock") and r.get("period") != "HT":
             r["period"], r["clock"] = estimate_clock(r["kickoff"], now)
     return rows
@@ -167,11 +170,58 @@ def _lineup(team):
     }
 
 
+_h2h_cache = {}  # external_id -> (fetched_at, h2h dict or None)
+
+
+def fd_h2h(external_id):
+    """Past meetings from football-data.org (a second source for the H2H tab)."""
+    if not FOOTBALL_DATA_KEY or not external_id.startswith("fd-"):
+        return None
+    hit = _h2h_cache.get(external_id)
+    if hit and time.time() - hit[0] < (12 * 3600 if hit[1] else 1800):
+        return hit[1]
+    result = None
+    try:
+        resp = requests.get(f"https://api.football-data.org/v4/matches/{external_id[3:]}/head2head",
+                            headers={"X-Auth-Token": FOOTBALL_DATA_KEY}, params={"limit": 10}, timeout=15)
+        if resp.ok:
+            data = resp.json()
+            agg = data.get("aggregates") or {}
+            home, away = agg.get("homeTeam") or {}, agg.get("awayTeam") or {}
+            meetings = []
+            for g in sorted(data.get("matches") or [], key=lambda g: g["utcDate"], reverse=True):
+                ft = (g.get("score") or {}).get("fullTime") or {}
+                if g.get("status") != "FINISHED" or ft.get("home") is None:
+                    continue
+                win = (g.get("score") or {}).get("winner")
+                meetings.append({
+                    "date": g["utcDate"][:10], "league": (g.get("competition") or {}).get("name", ""),
+                    "home": g["homeTeam"].get("shortName") or g["homeTeam"]["name"],
+                    "away": g["awayTeam"].get("shortName") or g["awayTeam"]["name"],
+                    "hs": ft["home"], "as": ft["away"],
+                    "home_won": win == "HOME_TEAM", "away_won": win == "AWAY_TEAM"})
+            if meetings:
+                result = {"tally": {"home": home.get("wins", 0), "draw": home.get("draws", 0),
+                                    "away": away.get("wins", 0)}, "meetings": meetings[:10]}
+        else:
+            print(f"football-data h2h: {resp.status_code} {resp.text[:120]}")
+    except Exception as exc:
+        print(f"football-data h2h failed: {exc}")
+    _h2h_cache[external_id] = (time.time(), result)
+    return result
+
+
 def fetch_detail(m):
     """Goals, line-ups, venue and referee for a match row; API-Football if a key is set."""
     if API_FOOTBALL_KEY and m["sport"] == "football":
         import apifootball
-        return apifootball.fetch_detail(m, API_FOOTBALL_KEY)
+        detail = apifootball.fetch_detail(m, API_FOOTBALL_KEY)
+        if m["status"] != "postponed" and not (detail and detail.get("h2h")):
+            h2h = fd_h2h(m["external_id"])
+            if h2h:
+                detail = detail or apifootball._notice(None)
+                detail["h2h"] = h2h
+        return detail
     return _fetch_detail_fd(m["external_id"])
 
 

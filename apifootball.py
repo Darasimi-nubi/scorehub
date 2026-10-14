@@ -205,6 +205,27 @@ def overlay_live(rows, key):
     return rows
 
 
+def settle_past(rows, key):
+    """Fix matches our delayed feed still lists as 'scheduled' although they kicked off long ago."""
+    now = datetime.now(timezone.utc)
+    for r in rows:
+        if r["status"] != "scheduled":
+            continue
+        kick = datetime.fromisoformat(r["kickoff"])
+        since = (now - kick).total_seconds() / 60
+        if since < 130 or since > 48 * 60:
+            continue
+        fx = _best_match(r, _fixtures_for(kick.astimezone(timezone.utc).date().isoformat(), key))
+        short = ((fx or {}).get("fixture", {}).get("status") or {}).get("short")
+        if short in ("FT", "AET", "PEN"):
+            goals = fx.get("goals") or {}
+            r["status"], r["period"], r["clock"] = "finished", "FT", None
+            r["home_score"], r["away_score"] = goals.get("home"), goals.get("away")
+        elif short in ("PST", "CANC", "ABD", "AWD", "WO"):
+            r["status"] = "postponed"
+    return rows
+
+
 def _place(starters, side):
     """Give each starter x/y percentages on one full pitch: home on the top half, away on the bottom.
 
@@ -534,7 +555,7 @@ def fetch_detail(m, key):
             _detail_cache[ext]["lineups"] = (time.time() - 6 * 3600 + 300, None)
 
     def load_h2h():
-        data = _get("/fixtures/headtohead", key, h2h=f"{home_id}-{away_id}", last=10)
+        data = _get("/fixtures/headtohead", key, h2h=f"{home_id}-{away_id}")  # no "last": the free plan refuses it
         return FAIL if data is None else _h2h(data.get("response"), home_id, away_id)
 
     def load_players():
