@@ -26,6 +26,8 @@ app = Flask(__name__)
 _detail_cache = {}  # external_id -> (fetched_at, detail dict or None)
 DETAIL_TTL = 60     # seconds; keeps API usage low however many people watch a match
 
+SPORTS = ("football", "basketball", "hockey")
+
 MATCH_SQL = """
     SELECT m.*, l.name AS league, l.country, l.sport,
            h.name AS home, a.name AS away,
@@ -55,6 +57,19 @@ def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         with open(os.path.join(BASE_DIR, "schema.sql")) as f:
             conn.executescript(f.read())
+        # Older databases only allowed football and basketball: rebuild the table without that limit.
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='leagues'").fetchone()
+        if row and "CHECK (sport IN" in row[0]:
+            conn.executescript("""
+                PRAGMA foreign_keys = OFF;
+                CREATE TABLE leagues_new (
+                    id INTEGER PRIMARY KEY, sport TEXT NOT NULL, name TEXT NOT NULL, country TEXT,
+                    UNIQUE (sport, name));
+                INSERT INTO leagues_new SELECT id, sport, name, country FROM leagues;
+                DROP TABLE leagues;
+                ALTER TABLE leagues_new RENAME TO leagues;
+                PRAGMA foreign_keys = ON;
+            """)
 
 
 def viewer_offset():
@@ -79,7 +94,7 @@ def load_groups(sport, day, league=None, offset=0, live=False):
     else:
         sql = MATCH_SQL + " WHERE m.kickoff >= ? AND m.kickoff < ?"
         params = [start.isoformat(), end.isoformat()]
-        if sport in ("football", "basketball"):
+        if sport in SPORTS:
             sql += " AND l.sport = ?"
             params.append(sport)
         if league:
@@ -123,7 +138,7 @@ def decorate(rows):
         apifootball.settle_past(football, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
     for r in rows:
-        if r["sport"] == "basketball" and r["status"] == "live" and \
+        if r["sport"] != "football" and r["status"] == "live" and \
                 (now - datetime.fromisoformat(r["kickoff"])).total_seconds() > 4.5 * 3600:
             r["status"], r["period"], r["clock"] = "finished", "FT", None  # stale "live"
     for r in football:
@@ -142,7 +157,7 @@ def live_rows(sport, league=None):
     sql = MATCH_SQL + """ WHERE (m.status = 'live'
                            OR (m.status = 'scheduled' AND m.kickoff >= ? AND m.kickoff <= ?))"""
     params = [(now - timedelta(minutes=140)).isoformat(), (now + timedelta(minutes=2)).isoformat()]
-    if sport in ("football", "basketball"):
+    if sport in SPORTS:
         sql += " AND l.sport = ?"
         params.append(sport)
     if league:
@@ -375,7 +390,7 @@ def league_chips(sport):
         JOIN matches m ON m.league_id = l.id
     """
     params = []
-    if sport in ("football", "basketball"):
+    if sport in SPORTS:
         sql += " WHERE l.sport = ?"
         params.append(sport)
     leagues = [{"name": r["name"], "country": r["country"]} for r in get_db().execute(sql, params)]
@@ -543,7 +558,7 @@ def start_sync():
     start_push()
     threading.Thread(
         target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),),
-        kwargs={"extras": (sync.EspnBasketballProvider(),)}, daemon=True
+        kwargs={"extras": (sync.EspnBasketballProvider(), sync.EspnHockeyProvider())}, daemon=True
     ).start()
 
 

@@ -1,0 +1,223 @@
+{% macro tl_event(e) %}
+  <span class="tl-ico {{ e.kind }}">{% if e.kind == 'goal' or e.kind == 'pen-miss' %}&#9917;{% elif e.kind == 'sub' %}&#8644;{% elif e.kind == 'var' %}VAR{% endif %}</span>
+  <span class="tl-txt"><b>{{ e.player }}</b>{% if e.note %} <em>{{ e.note }}</em>{% endif %}
+    {% if e.other %}<small>{% if e.kind == 'sub' %}&darr; {% else %}Assist: {% endif %}{{ e.other }}</small>{% endif %}</span>
+{% endmacro %}
+<div class="scoreboard {{ m.status }}">
+  <div class="league-line">{{ m.league }}{% if m.country %} <span class="country">{{ m.country }}</span>{% endif %}
+    {% if table_code(m.league) %}<a class="tbl" href="{{ url_for('table_page', code=table_code(m.league)) }}">Table →</a>{% endif %}</div>
+  <div class="board">
+    <div class="side">
+      {% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}
+      <span>{{ m.home }}</span>
+    </div>
+    <div class="mid">
+      {% if m.status == 'scheduled' or m.status == 'postponed' %}
+        <div class="big">vs</div>
+      {% else %}
+        <div class="big">{{ m.home_score if m.home_score is not none else '–' }} – {{ m.away_score if m.away_score is not none else '–' }}</div>
+      {% endif %}
+      <div class="state">
+        {% if m.status == 'live' %}
+          <span class="live-dot"></span>
+          {% if m.period == 'HT' %}Half time
+          {% else %}{{ m.clock or m.period }}{% if m.sport != 'football' and m.period %} · {{ m.period }}{% endif %}{% endif %}
+        {% elif m.status == 'finished' %}{{ 'Full time' if m.sport == 'football' or m.period in ('FT', None) else 'Final · ' ~ m.period }}
+        {% elif m.status == 'postponed' %}Postponed
+        {% else %}Not started{% endif %}
+      </div>
+    </div>
+    <div class="side">
+      {% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}
+      <span>{{ m.away }}</span>
+    </div>
+  </div>
+</div>
+
+{% set football = m.sport == 'football' and detail %}
+{% set tabs = [] %}
+{% if m.status != 'scheduled' and m.status != 'postponed' %}{% set _ = tabs.append(('summary', 'Summary')) %}{% endif %}
+{% if football and detail.stats %}{% set _ = tabs.append(('stats', 'Stats')) %}{% endif %}
+{% if football and detail.lineups %}{% set _ = tabs.append(('lineups', 'Line-ups')) %}{% endif %}
+{% if football and detail.h2h %}{% set _ = tabs.append(('h2h', 'H2H')) %}{% endif %}
+{% set _ = tabs.append(('info', 'Info')) %}
+
+<nav class="tabs">
+  {% for key, label in tabs %}<button type="button" class="tabbtn{{ ' tab-active' if loop.first }}" data-tab="{{ key }}">{{ label }}</button>{% endfor %}
+</nav>
+
+{% if m.status != 'scheduled' and m.status != 'postponed' %}
+<div class="tabpane{{ ' active' if tabs[0][0] == 'summary' }}" data-pane="summary">
+<section class="panel">
+  <h3>Summary</h3>
+  {% if football and detail.timeline %}
+  <div class="timeline">
+    {% for e in detail.timeline %}
+    {% if e.kind == 'divider' %}
+    <div class="tl-div"><span>{{ e.minute }}</span><b>{{ e.score }}</b></div>
+    {% else %}
+    <div class="tl-row">
+      <span class="tl-min">{{ e.minute }}</span>
+      <div class="tl-cell home">{% if e.side == 'home' %}{{ tl_event(e) }}{% endif %}</div>
+      <span class="tl-score">{{ e.score }}</span>
+      <div class="tl-cell away">{% if e.side == 'away' %}{{ tl_event(e) }}{% endif %}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty">{{ detail.notice if football and detail.notice else 'No events to show yet.' }}</p>
+  {% endif %}
+</section>
+</div>
+{% endif %}
+
+<div class="tabpane{{ ' active' if tabs[0][0] == 'stats' }}" data-pane="stats">
+{% if m.sport == 'football' and detail and detail.stats %}
+<section class="panel">
+  <h3>Match stats</h3>
+  {% for s in detail.stats %}
+  <div class="stat">
+    <div class="stat-head"><b>{{ s.home }}</b><span>{{ s.label }}</span><b>{{ s.away }}</b></div>
+    <div class="stat-bars">
+      <span class="bar {{ 'lead' if s.lead != 'away' }}" style="width: {{ s.home_pct }}%"></span>
+      <span class="bar {{ 'lead' if s.lead != 'home' }}" style="width: {{ s.away_pct }}%"></span>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+</div>
+
+<div class="tabpane{{ ' active' if tabs[0][0] == 'lineups' }}" data-pane="lineups">
+{% if m.sport == 'football' and detail and detail.lineups %}
+{% set lineups = detail.lineups %}
+<section class="panel">
+  <h3>Line-ups</h3>
+  {% if lineups.pitch %}
+  <div class="pitch">
+    <div class="pitch-lines"><span class="halfway"></span><span class="centre"></span><span class="box box-t"></span><span class="box box-b"></span></div>
+    <div class="team-tag home">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}<b>{{ lineups.home.formation or '' }}</b></div>
+    <div class="team-tag away">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}<b>{{ lineups.away.formation or '' }}</b></div>
+    {% for side in ['home', 'away'] %}
+    {% for p in lineups[side].starters %}
+    {% set mk = detail.marks.get(p.id|string, {}) %}
+    {% set rt = detail.ratings.get(p.id|string) %}
+    <div class="pl {{ side }}" style="left: {{ p.x }}%; top: {{ p.y }}%">
+      <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
+        {% if mk.red %}<i class="card r" title="Red card"></i>{% elif mk.yellow %}<i class="card y" title="Yellow card"></i>{% endif %}
+        {% if mk.goals %}<i class="ico goal" title="Goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
+        {% if mk.og %}<i class="ico og" title="Own goal">&#9917;</i>{% endif %}
+        {% if mk.off %}<i class="ico off" title="Substituted off {{ mk.off }}">&darr;</i>{% endif %}
+        {% if detail.motm == p.id|string %}<i class="ico motm" title="Player of the match">&#9733;</i>{% endif %}
+      </span>
+      {% if rt %}<span class="rate {{ rt.tone }}">{{ rt.rating }}</span>{% endif %}
+      <span class="pname">{% if p.number is not none %}<small>{{ p.number }}</small> {% endif %}{{ p.name }}</span>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if not lineups.pitch %}
+  <div class="lineups">
+    {% for side, team in [('home', m.home), ('away', m.away)] %}
+    {% set lu = lineups[side] %}
+    <div class="lu {{ side }}">
+      <h4>{{ team }}{% if lu.formation %} <small>{{ lu.formation }}</small>{% endif %}</h4>
+      <ol class="players">
+        {% for p in lu.starters %}
+        <li><span class="num">{{ p.number if p.number is not none else '' }}</span>{{ p.name }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if detail.subs and (detail.subs.home or detail.subs.away) %}
+<section class="panel">
+  <h3>Substitutions</h3>
+  <div class="subs">
+    {% for side in ['home', 'away'] %}
+    <div class="subcol">
+      {% for s in detail.subs[side] %}
+      <div class="sub">
+        <span class="sub-min">{{ s.minute }}</span>
+        <span class="sub-who">
+          <span class="sub-line"><i class="arr in">&uarr;</i><small>{{ '#' ~ s['in'].number if s['in'].number is not none }}</small> {{ s['in'].name }}</span>
+          <span class="sub-line"><i class="arr out">&darr;</i><small>{{ '#' ~ s.out.number if s.out.number is not none }}</small> {{ s.out.name }}</span>
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h3>Substitute players</h3>
+  <div class="benches">
+    {% for side in ['home', 'away'] %}
+    {% set lu = lineups[side] %}
+    <div class="bcol">
+      {% for p in lu.bench %}
+      {% set mk = detail.marks.get(p.id|string, {}) %}
+      {% set rt = detail.ratings.get(p.id|string) %}
+      <div class="bp {{ side }}">
+        <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
+          {% if mk.red %}<i class="card r"></i>{% elif mk.yellow %}<i class="card y"></i>{% endif %}
+          {% if mk.goals %}<i class="ico goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
+          {% if mk.on %}<i class="ico on-badge" title="Came on {{ mk.on }}">&uarr;</i>{% endif %}
+        </span>
+        <span class="who"><b>{{ p.name }}</b>{% if p.position %}<small>{{ p.position }}</small>{% endif %}</span>
+        {% if rt %}<span class="rate {{ rt.tone }}">{{ rt.rating }}</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% if lu.coach %}<p class="coach">Coach: {{ lu.coach }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+</div>
+
+{% if football and detail.h2h %}
+{% set h = detail.h2h %}
+<div class="tabpane{{ ' active' if tabs[0][0] == 'h2h' }}" data-pane="h2h">
+<section class="panel">
+  <h3>Head to head</h3>
+  <div class="h2h-tally">
+    <div class="hw"><b>{{ h.tally.home }}</b><span>{{ m.home }}</span></div>
+    <div class="hd"><b>{{ h.tally.draw }}</b><span>Draws</span></div>
+    <div class="hw aw"><b>{{ h.tally.away }}</b><span>{{ m.away }}</span></div>
+  </div>
+  <p class="h2h-sub">Last {{ h.meetings|length }} meetings</p>
+  <div class="h2h-list">
+    {% for g in h.meetings %}
+    <div class="h2h-row">
+      <span class="h2h-date">{{ g.date }}<small>{{ g.league }}</small></span>
+      <span class="h2h-team r{{ ' won' if g.home_won }}">{{ g.home }}</span>
+      <b class="h2h-score">{{ g.hs }} - {{ g.as }}</b>
+      <span class="h2h-team{{ ' won' if g.away_won }}">{{ g.away }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+</div>
+{% endif %}
+
+<div class="tabpane{{ ' active' if tabs[0][0] == 'info' }}" data-pane="info">
+<section class="panel">
+  <h3>Match info</h3>
+  <dl class="info">
+    <dt>Kickoff</dt><dd><span class="kickdt" data-utc="{{ m.kickoff }}">{{ m.kickoff[:16].replace('T', ' ') }} UTC</span></dd>
+    <dt>Competition</dt><dd>{{ m.league }}</dd>
+    {% if detail and detail.venue %}<dt>Venue</dt><dd>{{ detail.venue }}</dd>{% endif %}
+    {% if detail and detail.referee %}<dt>Referee</dt><dd>{{ detail.referee }}</dd>{% endif %}
+  </dl>
+</section>
+</div>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ScoreHub{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="theme-color" content="#0d0d12">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
+  <script src="{{ url_for('static', filename='tz.js') }}" {% block tzreload %}{% endblock %}></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <a class="brand" href="{{ url_for('index') }}">ScoreHub</a>
+      <nav class="main-nav">
+        <a class="on" href="{{ url_for('index') }}">Scores</a>
+        {% block navextra %}{% endblock %}
+      </nav>
+      <button type="button" class="bell" id="bellBtn" hidden aria-pressed="false" title="Goal alerts for your starred matches">&#128276; <span>Goal alerts</span></button>
+    </div>
+    {% set sp = sport|default('all') %}
+    <div class="wrap pills">
+      <a class="{{ 'on' if sp == 'all' }}" href="{{ url_for('index') }}">All</a>
+      <a class="{{ 'on' if sp == 'football' }}" href="{{ url_for('index', sport='football') }}">Football</a>
+      <a class="{{ 'on' if sp == 'basketball' }}" href="{{ url_for('index', sport='basketball') }}">Basketball</a>
+      <a class="{{ 'on' if sp == 'hockey' }}" href="{{ url_for('index', sport='hockey') }}">Hockey</a>
+    </div>
+  </header>
+  {% block body %}{% endblock %}
+  <script src="{{ url_for('static', filename='push.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

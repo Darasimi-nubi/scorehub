@@ -3,7 +3,7 @@
 Providers all expose fetch_matches() and return a list of dicts shaped like:
     {
       "external_id": "abc123",
-      "sport": "football" | "basketball",
+      "sport": "football" | "basketball" | "hockey",
       "league": "Premier League", "country": "England",
       "home": "Arsenal", "away": "Chelsea",
       "kickoff": "2026-10-09T19:00:00+00:00",
@@ -169,15 +169,18 @@ class FootballDataProvider:
         }
 
 
-class EspnBasketballProvider:
-    """Basketball scores from ESPN's public scoreboard feed (no key needed, one request per league).
+class EspnProvider:
+    """Scores from ESPN's public scoreboard feed (no key needed, one request per league per day).
 
-    NBA and WNBA by default. It is an unofficial feed, so if ESPN changes it the basketball
-    section may go quiet while football carries on.
+    An unofficial feed, so if ESPN changes it that sport may go quiet while the others carry on.
+    Subclasses set SPORT, LEAGUES, REGULATION (number of normal periods) and PREFIX.
     """
 
-    LEAGUES = [("nba", "NBA", "USA"), ("wnba", "WNBA", "USA")]
-    URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/{slug}/scoreboard"
+    SPORT = ""
+    LEAGUES = []          # (espn slug, display name, country)
+    REGULATION = 4        # periods before overtime
+    PREFIX = "Q"          # Q1.. for basketball, P1.. for hockey
+    URL = "https://site.api.espn.com/apis/site/v2/sports/{sport}/{slug}/scoreboard"
 
     def fetch_range(self, days_back, days_ahead):
         """One request per league per day: ESPN's plain ?dates=YYYYMMDD form (ranges get a 400)."""
@@ -187,7 +190,7 @@ class EspnBasketballProvider:
             for offset in range(-min(days_back, 3), days_ahead + 1):
                 day = today + timedelta(days=offset)
                 try:
-                    resp = requests.get(self.URL.format(slug=slug), params={"dates": f"{day:%Y%m%d}"},
+                    resp = requests.get(self.URL.format(sport=self.SPORT, slug=slug), params={"dates": f"{day:%Y%m%d}"},
                                         headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
                     resp.raise_for_status()
                     for event in resp.json().get("events", []):
@@ -195,17 +198,21 @@ class EspnBasketballProvider:
                         if m:
                             found[m["external_id"]] = m
                 except Exception as exc:
-                    print(f"basketball sync ({slug} {day}) failed: {exc}")
+                    print(f"{self.SPORT} sync ({slug} {day}) failed: {exc}")
         return list(found.values())
 
     def fetch_matches(self):
         return self.fetch_range(1, 1)
 
-    @staticmethod
-    def _period_label(n):
+    def _period_label(self, n, detail=""):
         if not n:
             return None
-        return f"Q{n}" if n <= 4 else ("OT" if n == 5 else f"{n - 4}OT")
+        if n <= self.REGULATION:
+            return f"{self.PREFIX}{n}"
+        if "SO" in detail.upper().replace("SOON", "").split() or "shootout" in detail.lower():
+            return "SO"
+        extra = n - self.REGULATION
+        return "OT" if extra == 1 else f"{extra}OT"
 
     def _convert(self, event, league, country):
         comp = (event.get("competitions") or [{}])[0]
@@ -215,18 +222,20 @@ class EspnBasketballProvider:
         st = event.get("status") or {}
         kind = st.get("type") or {}
         name, state = kind.get("name", ""), kind.get("state", "pre")
+        detail = (kind.get("shortDetail") or kind.get("detail") or "").replace("/", " ")
         period_n = st.get("period") or 0
         status, period, clock = "scheduled", None, None
         if name in ("STATUS_POSTPONED", "STATUS_CANCELED", "STATUS_CANCELLED", "STATUS_SUSPENDED"):
             status = "postponed"
         elif state == "post":
-            status, period = "finished", "FT" if period_n <= 4 else self._period_label(period_n)
+            status = "finished"
+            period = "FT" if period_n <= self.REGULATION else self._period_label(period_n, detail)
         elif state == "in":
             status = "live"
             if name == "STATUS_HALFTIME":
                 period = "HT"
             else:
-                period = self._period_label(period_n)
+                period = self._period_label(period_n, detail)
                 clock = "End" if name == "STATUS_END_PERIOD" else (st.get("displayClock") or None)
 
         def score(team):
@@ -244,8 +253,8 @@ class EspnBasketballProvider:
             kickoff = kickoff.replace(tzinfo=timezone.utc)
         played = status in ("live", "finished")
         return {
-            "external_id": f"espn-{event['id']}",
-            "sport": "basketball",
+            "external_id": f"espn-{self.SPORT}-{event['id']}",
+            "sport": self.SPORT,
             "league": league, "country": country,
             "home": team_name(teams["home"]), "away": team_name(teams["away"]),
             "home_crest": (teams["home"].get("team") or {}).get("logo"),
@@ -256,6 +265,18 @@ class EspnBasketballProvider:
             "away_score": score(teams["away"]) if played else None,
             "period": period, "clock": clock,
         }
+
+
+class EspnBasketballProvider(EspnProvider):
+    SPORT = "basketball"
+    LEAGUES = [("nba", "NBA", "USA"), ("wnba", "WNBA", "USA")]
+
+
+class EspnHockeyProvider(EspnProvider):
+    SPORT = "hockey"
+    LEAGUES = [("nhl", "NHL", "USA & Canada")]
+    REGULATION = 3
+    PREFIX = "P"
 
 
 def upsert(conn, m):

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS leagues (
     id      INTEGER PRIMARY KEY,
-    sport   TEXT NOT NULL CHECK (sport IN ('football', 'basketball')),
+    sport   TEXT NOT NULL,                 -- football, basketball, hockey
     name    TEXT NOT NULL,
     country TEXT,
     UNIQUE (sport, name)
