@@ -103,14 +103,17 @@
     {% for side in ['home', 'away'] %}
     {% for p in lineups[side].starters %}
     {% set mk = detail.marks.get(p.id|string, {}) %}
+    {% set rt = detail.ratings.get(p.id|string) %}
     <div class="pl {{ side }}" style="left: {{ p.x }}%; top: {{ p.y }}%">
-      <span class="shirt">{{ p.number if p.number is not none else '' }}
+      <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
         {% if mk.red %}<i class="card r" title="Red card"></i>{% elif mk.yellow %}<i class="card y" title="Yellow card"></i>{% endif %}
         {% if mk.goals %}<i class="ico goal" title="Goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
         {% if mk.og %}<i class="ico og" title="Own goal">&#9917;</i>{% endif %}
         {% if mk.off %}<i class="ico off" title="Substituted off {{ mk.off }}">&darr;</i>{% endif %}
+        {% if detail.motm == p.id|string %}<i class="ico motm" title="Player of the match">&#9733;</i>{% endif %}
       </span>
-      <span class="pname">{{ p.name }}</span>
+      {% if rt %}<span class="rate {{ rt.tone }}">{{ rt.rating }}</span>{% endif %}
+      <span class="pname">{% if p.number is not none %}<small>{{ p.number }}</small> {% endif %}{{ p.name }}</span>
     </div>
     {% endfor %}
     {% endfor %}
@@ -162,13 +165,15 @@
     <div class="bcol">
       {% for p in lu.bench %}
       {% set mk = detail.marks.get(p.id|string, {}) %}
+      {% set rt = detail.ratings.get(p.id|string) %}
       <div class="bp {{ side }}">
-        <span class="shirt">{{ p.number if p.number is not none else '' }}
+        <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
           {% if mk.red %}<i class="card r"></i>{% elif mk.yellow %}<i class="card y"></i>{% endif %}
           {% if mk.goals %}<i class="ico goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
           {% if mk.on %}<i class="ico on-badge" title="Came on {{ mk.on }}">&uarr;</i>{% endif %}
         </span>
         <span class="who"><b>{{ p.name }}</b>{% if p.position %}<small>{{ p.position }}</small>{% endif %}</span>
+        {% if rt %}<span class="rate {{ rt.tone }}">{{ rt.rating }}</span>{% endif %}
       </div>
       {% endfor %}
       {% if lu.coach %}<p class="coach">Coach: {{ lu.coach }}</p>{% endif %}

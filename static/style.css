@@ -158,7 +158,7 @@ a.arrow:hover { background: var(--card); }
 .team-tag.home { top: 10px; left: 12px; }
 .team-tag.away { bottom: 10px; right: 12px; flex-direction: row-reverse; }
 .pl { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 24%; transform: translate(-50%, -50%); }
-.shirt { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-weight: 700; font-size: .95rem; }
+.shirt { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font-weight: 700; font-size: .95rem; }
 .pl.home .shirt, .bp.home .shirt { background: #fff; color: #0d0f12; }
 .pl.away .shirt, .bp.away .shirt { background: #14171c; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); }
 .pname { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font-size: .72rem; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
@@ -214,7 +214,7 @@ a.arrow:hover { background: var(--card); }
   .shirt { width: 28px; height: 28px; font-size: .82rem; }
   .pname { font-size: .62rem; }
   .pl { width: 26%; }
-  .pitch { aspect-ratio: 5 / 8; }
+  .pitch { aspect-ratio: 5 / 9.4; }
   .top-row { gap: 20px; }
   .mlink { grid-template-columns: 58px minmax(0, 1fr) auto; }
   .tms { padding: 0 10px; }
@@ -279,3 +279,18 @@ a.arrow:hover { background: var(--card); }
 .bell[hidden] { display: none; }
 .bell.bell-on { background: #f5a623; color: #1a1200; }
 @media (max-width: 520px) { .bell span { display: none; } .bell { padding: 8px 12px; } }
+
+/* ---- player photos and ratings ---- */
+.shirt .ph { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #e6e8ec; }
+.pl.away .shirt .ph, .bp.away .shirt .ph { background: #2a2f38; }
+.shirt .motm { top: -6px; right: -6px; background: #3b6cf5; color: #fff; }
+.pl .rate { margin-top: -9px; position: relative; z-index: 1; }
+.rate { min-width: 28px; padding: 1px 5px; border-radius: 4px; text-align: center; font-size: 11px; font-weight: 700; color: #fff; line-height: 1.35; }
+.rate.red { background: #d93a3a; }
+.rate.orange { background: #e8852b; }
+.rate.yellow { background: #d9b415; color: #1a1500; }
+.rate.green { background: #1fb45a; }
+.rate.blue { background: #3b6cf5; }
+.bp .rate { margin-left: auto; }
+.pname small { color: #b9bec7; font-weight: 700; margin-right: 2px; }
+@media (max-width: 520px) { .shirt { width: 32px; height: 32px; } .rate { font-size: 10px; min-width: 24px; } }

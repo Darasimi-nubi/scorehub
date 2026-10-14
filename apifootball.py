@@ -4,6 +4,7 @@ The free plan allows 100 requests a day and only yesterday/today/tomorrow, so
 everything here is cached and a daily budget stops us going over.
 """
 import difflib
+import json
 import html
 import os
 import re
@@ -76,6 +77,8 @@ def _get(path, key, **params):
             data = resp.json()
             if data.get("errors"):
                 print(f"api-football: {path} {params}: {data['errors']}")
+                if "request limit" in json.dumps(data["errors"]).lower():
+                    _calls["n"] = DAILY_LIMIT  # the provider says today's allowance is gone: stop asking
                 return None
             return _unescape(data)
         except Exception as exc:
@@ -239,7 +242,9 @@ def _lineups(items, home_id, away_id):
                  "name": (r.get("player") or {}).get("name") or "Unknown",
                  "number": (r.get("player") or {}).get("number"),
                  "position": POSITIONS.get((r.get("player") or {}).get("pos"), (r.get("player") or {}).get("pos")),
-                 "grid": (r.get("player") or {}).get("grid")} for r in rows or []]
+                 "grid": (r.get("player") or {}).get("grid"),
+                 "photo": f"https://media.api-sports.io/football/players/{(r.get('player') or {}).get('id')}.png"}
+                for r in rows or []]
 
     for item in items or []:
         side = "home" if (item.get("team") or {}).get("id") == home_id else "away"
@@ -381,6 +386,27 @@ def _h2h(items, home_id, away_id):
     return {"tally": tally, "meetings": meetings[:10]} if meetings else None
 
 
+def _tone(rating):
+    """SofaScore-style colour band for a rating."""
+    return ("blue" if rating >= 9 else "green" if rating >= 7 else "yellow" if rating >= 6.5
+            else "orange" if rating >= 6 else "red")
+
+
+def _ratings(items):
+    """Player id -> {rating, tone} from /fixtures/players (only players who have a rating)."""
+    out = {}
+    for team in items or []:
+        for p in team.get("players") or []:
+            stats = (p.get("statistics") or [{}])[0]
+            raw = (stats.get("games") or {}).get("rating")
+            try:
+                value = round(float(raw), 1)
+            except (TypeError, ValueError):
+                continue
+            out[str((p.get("player") or {}).get("id"))] = {"rating": f"{value:.1f}", "tone": _tone(value), "value": value}
+    return out
+
+
 FAIL = object()  # a request failed: keep whatever we had and retry later
 
 # (API-Football stat name, label shown on the page)
@@ -443,7 +469,7 @@ def budget_used_up():
 
 def _notice(text):
     return {"goals": [], "stats": [], "lineups": None, "marks": {}, "subs": {"home": [], "away": []},
-            "h2h": None, "timeline": [], "venue": None, "referee": None, "notice": text}
+            "h2h": None, "timeline": [], "venue": None, "referee": None, "ratings": {}, "motm": None, "notice": text}
 
 
 def fetch_detail(m, key):
@@ -511,6 +537,17 @@ def fetch_detail(m, key):
         data = _get("/fixtures/headtohead", key, h2h=f"{home_id}-{away_id}", last=10)
         return FAIL if data is None else _h2h(data.get("response"), home_id, away_id)
 
+    def load_players():
+        data = _get("/fixtures/players", key, fixture=fid)
+        return FAIL if data is None else _ratings(data.get("response"))
+
+    ratings = {}
+    if lineups and played:
+        ratings = _cached(ext, "players", final if status == "finished" else 600, load_players) or {}
+    motm = None
+    if ratings and status == "finished":
+        motm = max(ratings, key=lambda k: ratings[k]["value"])
+
     h2h = _cached(ext, "h2h", 12 * 3600, load_h2h)
     if not h2h:  # failed or none: don't ask again for half an hour
         _detail_cache[ext]["h2h"] = (time.time() - 12 * 3600 + 1800, None)
@@ -519,7 +556,7 @@ def fetch_detail(m, key):
         else ({}, {"home": [], "away": []})
     return {
         "goals": (events or {}).get("goals", []), "stats": stats or [], "lineups": lineups,
-        "marks": marks, "subs": subs, "h2h": h2h,
+        "marks": marks, "subs": subs, "h2h": h2h, "ratings": ratings, "motm": motm,
         "timeline": _timeline((events or {}).get("events", []), lineups, home_id, status) if events else [],
         "venue": (fx["fixture"].get("venue") or {}).get("name"),
         "referee": fx["fixture"].get("referee"),
