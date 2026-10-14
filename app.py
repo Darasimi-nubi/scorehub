@@ -188,12 +188,14 @@ def fd_h2h(external_id):
             data = resp.json()
             agg = data.get("aggregates") or {}
             home, away = agg.get("homeTeam") or {}, agg.get("awayTeam") or {}
-            meetings = []
+            meetings, tally = [], {"home": 0, "draw": 0, "away": 0}
             for g in sorted(data.get("matches") or [], key=lambda g: g["utcDate"], reverse=True):
                 ft = (g.get("score") or {}).get("fullTime") or {}
-                if g.get("status") != "FINISHED" or ft.get("home") is None:
-                    continue
+                if str(g.get("id")) == external_id[3:] or g.get("status") != "FINISHED" or ft.get("home") is None:
+                    continue  # skip the match being viewed and anything unfinished
                 win = (g.get("score") or {}).get("winner")
+                winner_id = g["homeTeam"]["id"] if win == "HOME_TEAM" else g["awayTeam"]["id"] if win == "AWAY_TEAM" else None
+                tally["draw" if winner_id is None else "home" if winner_id == home.get("id") else "away"] += 1
                 meetings.append({
                     "date": g["utcDate"][:10], "league": (g.get("competition") or {}).get("name", ""),
                     "home": g["homeTeam"].get("shortName") or g["homeTeam"]["name"],
@@ -201,8 +203,7 @@ def fd_h2h(external_id):
                     "hs": ft["home"], "as": ft["away"],
                     "home_won": win == "HOME_TEAM", "away_won": win == "AWAY_TEAM"})
             if meetings:
-                result = {"tally": {"home": home.get("wins", 0), "draw": home.get("draws", 0),
-                                    "away": away.get("wins", 0)}, "meetings": meetings[:10]}
+                result = {"tally": tally, "meetings": meetings[:10]}
         else:
             print(f"football-data h2h: {resp.status_code} {resp.text[:120]}")
     except Exception as exc:

@@ -388,13 +388,13 @@ def _timeline(events, lineups, home_id, status):
     return out
 
 
-def _h2h(items, home_id, away_id):
+def _h2h(items, home_id, away_id, skip_fid=None):
     """Past meetings of the two clubs, newest first, plus a win / draw / win tally."""
     done = {"FT", "AET", "PEN"}
     meetings, tally = [], {"home": 0, "draw": 0, "away": 0}
     for f in sorted(items or [], key=lambda f: f["fixture"]["date"], reverse=True):
-        if (f["fixture"].get("status") or {}).get("short") not in done:
-            continue
+        if f["fixture"].get("id") == skip_fid or (f["fixture"].get("status") or {}).get("short") not in done:
+            continue  # not the match being viewed, and only finished games
         hg, ag = f["goals"]["home"], f["goals"]["away"]
         if hg is None or ag is None:
             continue
@@ -556,7 +556,7 @@ def fetch_detail(m, key):
 
     def load_h2h():
         data = _get("/fixtures/headtohead", key, h2h=f"{home_id}-{away_id}")  # no "last": the free plan refuses it
-        return FAIL if data is None else _h2h(data.get("response"), home_id, away_id)
+        return FAIL if data is None else _h2h(data.get("response"), home_id, away_id, fid)
 
     def load_players():
         data = _get("/fixtures/players", key, fixture=fid)
