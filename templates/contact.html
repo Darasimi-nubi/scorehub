@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Contact – ScoreHub{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Contact</h1>
+  <p>Found a wrong score, a missing match, a problem with goal alerts, or want content removed? Get in touch.</p>
+  {% if contact_email %}
+  <p>Email: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+  <p>We read every message, but we cannot promise a reply to each one.</p>
+  {% else %}
+  <p>The contact address for this site has not been set up yet.</p>
+  {% endif %}
+</main>
+{% endblock %}

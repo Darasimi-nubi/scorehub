@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Terms of Use – ScoreHub{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Terms of Use</h1>
+  <p class="updated">Last updated: 15 October 2026</p>
+  <p>By using ScoreHub you agree to these terms. If you do not agree, please do not use the site.</p>
+
+  <h2>Information only</h2>
+  <p>ScoreHub shows scores, fixtures, tables and statistics for information and entertainment. The data comes from third parties and
+  can be delayed, incomplete or wrong. We give no guarantee of accuracy or availability, and you should not rely on the site for
+  betting, financial or other decisions.</p>
+
+  <h2>Acceptable use</h2>
+  <ul>
+    <li>Do not try to disrupt or overload the site, or access it by automated means that put unreasonable load on it.</li>
+    <li>Do not copy the site's data in bulk or resell it. The data belongs to its providers and is shown under their terms.</li>
+  </ul>
+
+  <h2>Third-party content and intellectual property</h2>
+  <p>Team names, crests and logos are trademarks of their owners and are shown for identification. Highlight videos are embedded from
+  YouTube and belong to their uploaders; they play under YouTube's terms. If you own content shown here and want it removed, please
+  <a href="{{ url_for('contact_page') }}">contact us</a>.</p>
+
+  <h2>Advertising</h2>
+  <p>The site may display advertisements from third parties. We are not responsible for the content of those ads or of sites they link to.</p>
+
+  <h2>Liability</h2>
+  <p>The site is provided "as is". To the extent the law allows, we are not liable for any loss arising from your use of the site or from
+  errors, delays or interruptions in it.</p>
+
+  <h2>Changes</h2>
+  <p>We may change these terms or the site at any time. Continuing to use the site means you accept the updated terms.</p>
+</main>
+{% endblock %}

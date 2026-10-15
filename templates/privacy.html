@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy – ScoreHub{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: 15 October 2026</p>
+  <p>This policy explains what information ScoreHub (the "site") collects when you use it, and how it is used. You do not need
+  an account to use the site, and we do not ask for your name or email address.</p>
+
+  <h2>Information we handle</h2>
+  <ul>
+    <li><b>Your timezone and starred matches.</b> Your browser stores your timezone offset and the matches you star in its own
+    local storage, on your device. Your timezone is sent to our server so times can be shown in your local time.</li>
+    <li><b>Goal alerts (optional).</b> If you turn on goal alerts, your browser gives us a push-notification address and we store it,
+    together with the match numbers you starred, so we can send you a notification when a goal is scored. You can turn alerts off
+    at any time on the site or in your browser settings, and the stored address is then no longer used.</li>
+    <li><b>Server logs.</b> Our hosting provider records technical information such as IP address, browser type and the pages
+    requested. This is used to run and secure the site.</li>
+  </ul>
+
+  <h2>Advertising and cookies</h2>
+  <p>We may show ads served by Google AdSense. Google and its partners use cookies and similar technologies to show ads based on your
+  visits to this and other websites, and to measure how ads perform.</p>
+  <ul>
+    <li>Google's use of advertising cookies lets it and its partners serve ads to you based on your visit to this site and/or other sites on the internet.</li>
+    <li>You can opt out of personalised advertising by visiting <a href="https://adssettings.google.com" rel="noopener">Google Ads Settings</a>.
+    You can also learn more at <a href="https://policies.google.com/technologies/ads" rel="noopener">How Google uses information from sites or apps that use its services</a>.</li>
+    <li>Where required (for example in the European Economic Area and the United Kingdom), we ask for your consent before using cookies for personalised ads.</li>
+  </ul>
+
+  <h2>Third-party content</h2>
+  <p>Match highlights are embedded from YouTube (using the privacy-enhanced youtube-nocookie.com address). When a video plays, YouTube may
+  collect information about you under <a href="https://policies.google.com/privacy" rel="noopener">Google's Privacy Policy</a>. Fonts are loaded from Google Fonts.
+  Team crests and score data are fetched from sports data providers by our server, not by your browser, but crest images may be loaded from the provider's servers.</p>
+
+  <h2>Sharing</h2>
+  <p>We do not sell your personal information. Information is shared only with the services needed to run the site (hosting,
+  advertising and the services listed above) or when the law requires it.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>Clear the site's data in your browser settings to remove your timezone and starred matches.</li>
+    <li>Turn off notifications for this site in your browser to stop goal alerts.</li>
+    <li>Block or delete cookies in your browser settings. The site's scores will still work.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>ScoreHub is not directed at children under 13 and we do not knowingly collect personal information from them.</p>
+
+  <h2>Changes and contact</h2>
+  <p>We may update this policy and will change the date above when we do. Questions about privacy can be sent through the
+  <a href="{{ url_for('contact_page') }}">Contact page</a>.</p>
+</main>
+{% endblock %}

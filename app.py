@@ -5,7 +5,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 import requests
-from flask import Flask, abort, g, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, abort, g, jsonify, render_template, request, send_from_directory
 
 from config import load_env
 
@@ -18,6 +18,12 @@ load_env()  # reads FOOTBALL_DATA_KEY from the .env file, if there is one
 FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 # Used for goal scorers and line-ups on the match page (api-sports.io, free plan).
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
+
+# Google AdSense publisher id (looks like ca-pub-1234567890123456); leave unset to show no ads.
+ADSENSE_CLIENT = (os.environ.get("ADSENSE_CLIENT") or "").strip()
+# Public contact address shown on the Contact page (use an address you are happy to publish).
+CONTACT_EMAIL = (os.environ.get("CONTACT_EMAIL") or "").strip()
+SITE_URL = (os.environ.get("SITE_URL") or "https://scorehubber.name.ng").rstrip("/")
 
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 import highlights  # match highlight videos (YOUTUBE_API_KEY)
@@ -323,6 +329,8 @@ def code_for(league_name):
 
 
 app.jinja_env.globals["table_code"] = code_for
+app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
+app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
 
 def fetch_standings(code):
@@ -504,6 +512,53 @@ def partial_highlights(match_id):
     if hl is None:
         abort(404)
     return render_template("_highlights.html", hl=hl)
+
+
+# ---- Pages that ad networks and visitors expect, plus crawler files ----
+
+@app.route("/about")
+def about_page():
+    return render_template("about.html")
+
+
+@app.route("/privacy")
+def privacy_page():
+    return render_template("privacy.html")
+
+
+@app.route("/terms")
+def terms_page():
+    return render_template("terms.html")
+
+
+@app.route("/contact")
+def contact_page():
+    return render_template("contact.html")
+
+
+@app.route("/ads.txt")
+def ads_txt():
+    """Tells ad buyers that this publisher id may sell this site's ad space (needed once AdSense is set up)."""
+    if not ADSENSE_CLIENT:
+        abort(404)
+    pub = ADSENSE_CLIENT.replace("ca-pub-", "pub-")
+    return Response(f"google.com, {pub}, DIRECT, f08c47fec0942fa0\n", mimetype="text/plain")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    return Response(f"User-agent: *\nAllow: /\nDisallow: /partial/\nDisallow: /api/\n\nSitemap: {SITE_URL}/sitemap.xml\n",
+                    mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    paths = ["/", "/?sport=football", "/?sport=basketball", "/?sport=hockey", "/?sport=tennis", "/?sport=cricket",
+             "/about", "/privacy", "/terms", "/contact"]
+    body = "".join(f"<url><loc>{SITE_URL}{p.replace('&', '&amp;')}</loc></url>" for p in paths)
+    return Response('<?xml version="1.0" encoding="UTF-8"?>'
+                    f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',
+                    mimetype="application/xml")
 
 
 @app.route("/sw.js")
