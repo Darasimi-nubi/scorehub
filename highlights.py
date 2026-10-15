@@ -42,7 +42,9 @@ STOP_WORDS = {"fc", "cf", "afc", "sc", "ac", "as", "ssc", "cd", "ud", "sv", "fk"
               "of", "and", "u21", "u23", "u19", "women"}
 BAD_TITLE = ("preview", "prediction", "predictions", "reaction", "reacts", "watchalong", "watch along", "simulation",
              "efootball", "fifa", "ea sports fc", "ea fc", "pes ", "gameplay", "press conference", "live stream",
-             "livestream", "live:", "pre-match", "pre match", "post match", "post-match", "interview", "podcast")
+             "livestream", "live:", "pre-match", "pre match", "post match", "post-match", "interview", "podcast",
+             "lego", "animation", "animated", "recreat", "cartoon", "roblox", "minecraft", "gta", "#shorts", "shorts",
+             "mod ", "fm2", "football manager", "tiktok", "edit ", "fan made", "fan-made", "trailer")
 GOOD_TITLE = ("highlight", "highlights", "goals", "resumen", "resume", "résumé", "extended", "all goals", "best moments")
 TRUSTED = ("premier league", "laliga", "la liga", "serie a", "bundesliga", "ligue 1", "uefa", "champions league",
            "europa league", "conference league", "mls", "nba", "nhl", "wnba", "espn", "sky sports", "tnt sports",
@@ -59,7 +61,7 @@ def _db():
 
 
 def _key(m):
-    return "v2|" + (m["external_id"] or f"id-{m['id']}")  # v2: results saved before the country check are ignored
+    return "v3|" + (m["external_id"] or f"id-{m['id']}")  # v3: results saved before the country check are ignored
 
 
 def _kickoff(m):
@@ -136,15 +138,25 @@ def _search(m, key):
     if not candidates:
         return None
     candidates.sort(reverse=True)
-    top = candidates[:5]
+    top = candidates[:8]
     try:
         top = _check_playable(top, key)
     except Exception as exc:
-        print(f"highlights: could not check availability: {exc}")  # fall back to the best title match
+        # Could not check duration/availability: only trust well-known channels, never a random upload.
+        print(f"highlights: could not check availability: {exc}")
+        top = [c for c in top if any(t in c[3].lower() for t in TRUSTED)]
     if not top:
         return None
     _score, vid, title, channel = top[0]
     return vid, title, channel
+
+
+def _seconds(iso):
+    m = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso or "")
+    if not m:
+        return 0
+    h, mi, se = (int(x or 0) for x in m.groups())
+    return h * 3600 + mi * 60 + se
 
 
 def _check_playable(top, key):
@@ -157,6 +169,7 @@ def _check_playable(top, key):
     info = {v["id"]: v for v in resp.json().get("items") or []}
     scored = []
     for score, vid, title, channel in top:
+        trusted = any(t in channel.lower() for t in TRUSTED)
         v = info.get(vid)
         if v is None:
             continue  # gone, or private
@@ -167,6 +180,15 @@ def _check_playable(top, key):
             continue
         if "allowed" in rr and COUNTRY not in rr["allowed"]:
             continue
+        secs = _seconds((v.get("contentDetails") or {}).get("duration"))
+        if secs < 100:
+            continue  # Shorts and teasers
+        if secs > 40 * 60:
+            continue  # full-match replays and live streams
+        if not trusted and not (180 <= secs <= 25 * 60):
+            continue  # an unknown channel has to look like a proper highlights video
+        if 240 <= secs <= 20 * 60:
+            score += 0.5
         if not rr:
             score += 1.0
         scored.append((score, vid, title, channel))
