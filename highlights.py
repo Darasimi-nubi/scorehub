@@ -24,6 +24,8 @@ _subs = os.environ.get("SUBS_DB_PATH")
 DB_PATH = os.environ.get("HIGHLIGHTS_DB_PATH") or os.path.join(os.path.dirname(_subs) if _subs else BASE_DIR, "highlights.db")
 
 SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+COUNTRY = (os.environ.get("HIGHLIGHTS_COUNTRY") or "NG").upper()  # where most of your visitors are
 WAIT_AFTER_KICKOFF = timedelta(hours=3)   # highlights are rarely up before this
 RETRY_EARLY = 45 * 60                     # seconds between searches, first two days
 RETRY_LATE = 12 * 3600                    # ...then until the give-up point
@@ -32,6 +34,8 @@ GIVE_UP_AFTER = timedelta(days=14)
 
 _lock = threading.Lock()
 _inflight = set()
+_backoff = {}  # key -> time until which a failed search is not retried
+ERROR_PAUSE = 300
 _quota = {"day": None, "used": 0, "blocked_until": 0.0}
 
 STOP_WORDS = {"fc", "cf", "afc", "sc", "ac", "as", "ssc", "cd", "ud", "sv", "fk", "bk", "the", "club", "de", "del", "da",
@@ -55,7 +59,7 @@ def _db():
 
 
 def _key(m):
-    return m["external_id"] or f"id-{m['id']}"
+    return "v2|" + (m["external_id"] or f"id-{m['id']}")  # v2: results saved before the country check are ignored
 
 
 def _kickoff(m):
@@ -96,7 +100,7 @@ def _search(m, key):
     kickoff = _kickoff(m)
     params = {
         "part": "snippet", "type": "video", "maxResults": 15, "order": "relevance",
-        "videoEmbeddable": "true", "relevanceLanguage": "en", "key": key,
+        "videoEmbeddable": "true", "relevanceLanguage": "en", "key": key, "regionCode": COUNTRY,
         "q": f"{m['home']} vs {m['away']} highlights",
         "publishedAfter": kickoff.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
@@ -110,7 +114,7 @@ def _search(m, key):
         print(f"highlights: YouTube {resp.status_code} {resp.text[:160]}")
         raise RuntimeError("api")
     home_t, away_t = _tokens(m["home"]), _tokens(m["away"])
-    best, best_score = None, 0.0
+    candidates = []
     for item in resp.json().get("items") or []:
         sn = item.get("snippet") or {}
         title, channel = sn.get("title") or "", sn.get("channelTitle") or ""
@@ -128,9 +132,46 @@ def _search(m, key):
             score += 2.0
         if "highlights" in title.lower():
             score += 0.5
-        if score > best_score:
-            best, best_score = (item["id"]["videoId"], title, channel), score
-    return best
+        candidates.append((score, item["id"]["videoId"], title, channel))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    top = candidates[:5]
+    try:
+        top = _check_playable(top, key)
+    except Exception as exc:
+        print(f"highlights: could not check availability: {exc}")  # fall back to the best title match
+    if not top:
+        return None
+    _score, vid, title, channel = top[0]
+    return vid, title, channel
+
+
+def _check_playable(top, key):
+    """Drops videos that cannot be embedded or are blocked in COUNTRY, and prefers ones with no
+    country restrictions at all (they play for every visitor). Costs 1 quota unit."""
+    resp = requests.get(VIDEOS_URL, params={"part": "contentDetails,status", "key": key,
+                                            "id": ",".join(c[1] for c in top)}, timeout=12)
+    if not resp.ok:
+        raise RuntimeError(f"videos.list {resp.status_code}")
+    info = {v["id"]: v for v in resp.json().get("items") or []}
+    scored = []
+    for score, vid, title, channel in top:
+        v = info.get(vid)
+        if v is None:
+            continue  # gone, or private
+        if not (v.get("status") or {}).get("embeddable", True):
+            continue
+        rr = (v.get("contentDetails") or {}).get("regionRestriction") or {}
+        if COUNTRY in (rr.get("blocked") or []):
+            continue
+        if "allowed" in rr and COUNTRY not in rr["allowed"]:
+            continue
+        if not rr:
+            score += 1.0
+        scored.append((score, vid, title, channel))
+    scored.sort(reverse=True)
+    return scored
 
 
 def _run(m, key):
@@ -145,7 +186,8 @@ def _run(m, key):
         with _lock:
             _inflight.discard(ck)
     if result == "error":
-        return  # try again on a later view; nothing stored
+        _backoff[ck] = time.time() + ERROR_PAUSE  # nothing stored; try again in a few minutes
+        return
     with _db() as conn:
         vid, title, channel = result if result else (None, None, None)
         conn.execute("INSERT OR REPLACE INTO highlights (key, video_id, title, channel, checked) VALUES (?,?,?,?,?)",
@@ -154,7 +196,7 @@ def _run(m, key):
 
 def get(m):
     """State for the Highlights tab: None for matches that are not finished, otherwise a dict with
-    state = found | searching | wait | none | nokey, plus video_id/title/channel and a YouTube search link."""
+    state = found | searching | wait | none | error | nokey, plus video_id/title/channel and a YouTube search link."""
     if m["status"] != "finished":
         return None
     info = {"state": "nokey", "video_id": None, "title": None, "channel": None, "search_url": search_url(m)}
@@ -177,6 +219,9 @@ def get(m):
         return info
     if now > kickoff + GIVE_UP_AFTER:
         info["state"] = "none"
+        return info
+    if _backoff.get(ck, 0) > time.time():
+        info["state"] = "error"
         return info
     retry = RETRY_EARLY if now < kickoff + EARLY_WINDOW else RETRY_LATE
     if row and time.time() - row[3] < retry:
