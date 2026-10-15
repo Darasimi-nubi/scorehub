@@ -39,6 +39,7 @@
 {% set football = m.sport == 'football' and detail %}
 {% set tabs = [] %}
 {% if m.status != 'scheduled' and m.status != 'postponed' %}{% set _ = tabs.append(('summary', 'Summary')) %}{% endif %}
+{% if hl %}{% set _ = tabs.append(('highlights', 'Highlights')) %}{% endif %}
 {% if football and detail.stats %}{% set _ = tabs.append(('stats', 'Stats')) %}{% endif %}
 {% if football and detail.lineups %}{% set _ = tabs.append(('lineups', 'Line-ups')) %}{% endif %}
 {% if football and detail.h2h %}{% set _ = tabs.append(('h2h', 'H2H')) %}{% endif %}
@@ -209,6 +210,12 @@
     {% endfor %}
   </div>
 </section>
+</div>
+{% endif %}
+
+{% if hl %}
+<div class="tabpane{{ ' active' if tabs[0][0] == 'highlights' }}" data-pane="highlights">
+{% include "_highlights.html" %}
 </div>
 {% endif %}
 

@@ -35,6 +35,36 @@
     var b = e.target.closest(".tabbtn");
     if (b) showTab(b.dataset.tab);
   });
+  var timer = null, hlTimer = null, hlTries = 0;
+  function isFinished() { return !!document.querySelector("#match .scoreboard.finished"); }
+  // A finished match no longer changes, and re-drawing the page would restart a playing video,
+  // so stop refreshing it and only look for the highlights video.
+  function settle() {
+    if (!isFinished()) return;
+    if (timer) { clearInterval(timer); timer = null; }
+    watchHighlights();
+  }
+  function watchHighlights() {
+    var pane = document.querySelector('#match .tabpane[data-pane="highlights"]');
+    var panel = pane && pane.querySelector(".hl");
+    if (hlTimer || !panel || panel.dataset.vid || panel.dataset.state === "nokey") return;
+    hlTimer = setInterval(function () {
+      hlTries += 1;
+      if (hlTries > 90) { clearInterval(hlTimer); return; }
+      fetch("{{ url_for('partial_highlights', match_id=m.id) }}")
+        .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
+        .then(function (html) {
+          var tmp = document.createElement("div");
+          tmp.innerHTML = html;
+          var fresh = tmp.querySelector(".hl");
+          if (fresh && fresh.dataset.vid) {
+            pane.innerHTML = html;
+            clearInterval(hlTimer);
+          }
+        })
+        .catch(function () {});
+    }, 20000);
+  }
   function refresh() {
     fetch("{{ url_for('partial_match', match_id=m.id) }}")
       .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
@@ -42,10 +72,12 @@
         document.getElementById("match").innerHTML = html;
         localiseTimes();
         if (currentTab) showTab(currentTab);
+        settle();
       })
       .catch(function () {});
   }
   localiseTimes();
-  setInterval(refresh, 10000);
+  timer = setInterval(refresh, 10000);
+  settle();
 </script>
 {% endblock %}

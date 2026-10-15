@@ -20,6 +20,7 @@ FOOTBALL_DATA_KEY = os.environ.get("FOOTBALL_DATA_KEY")
 API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
 
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
+import highlights  # match highlight videos (YOUTUBE_API_KEY)
 
 app = Flask(__name__)
 
@@ -484,7 +485,7 @@ def match_page(match_id):
     # "All matches" should return to the day the viewer sees this game on (their local day).
     kickoff = datetime.fromisoformat(m["kickoff"])
     back_date = (kickoff + timedelta(minutes=viewer_offset())).date().isoformat()
-    return render_template("match.html", m=m, detail=fetch_detail(m),
+    return render_template("match.html", m=m, detail=fetch_detail(m), hl=highlights.get(m),
                            back_date=back_date)
 
 
@@ -492,7 +493,17 @@ def match_page(match_id):
 def partial_match(match_id):
     """HTML fragment the match page polls to refresh the score and goals."""
     m = match_or_404(match_id)
-    return render_template("_match_body.html", m=m, detail=fetch_detail(m))
+    return render_template("_match_body.html", m=m, detail=fetch_detail(m), hl=highlights.get(m))
+
+
+@app.route("/partial/highlights/<int:match_id>")
+def partial_highlights(match_id):
+    """Just the Highlights tab content; the page polls this until a video turns up."""
+    m = match_or_404(match_id)
+    hl = highlights.get(m)
+    if hl is None:
+        abort(404)
+    return render_template("_highlights.html", hl=hl)
 
 
 @app.route("/sw.js")

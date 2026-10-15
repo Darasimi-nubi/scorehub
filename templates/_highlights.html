@@ -1,0 +1,16 @@
+<section class="panel hl" data-state="{{ hl.state }}" data-vid="{{ hl.video_id or '' }}">
+  <h3>Highlights</h3>
+  {% if hl.state == 'found' %}
+  <div class="hl-frame">
+    <iframe src="https://www.youtube-nocookie.com/embed/{{ hl.video_id }}" title="{{ hl.title }}" loading="lazy"
+            allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+  <p class="hl-meta">{{ hl.title }}{% if hl.channel %} &middot; {{ hl.channel }}{% endif %}</p>
+  {% elif hl.state == 'searching' %}
+  <p class="hl-note">Looking for the highlights&hellip;</p>
+  {% elif hl.state == 'wait' or hl.state == 'none' %}
+  <p class="hl-note">Highlights usually appear a few hours after full-time. This page keeps checking.</p>
+  {% endif %}
+  <a class="hl-btn" href="{{ hl.search_url }}" target="_blank" rel="noopener">{{ 'Open on YouTube' if hl.state == 'found' else 'Search on YouTube' }}</a>
+</section>
