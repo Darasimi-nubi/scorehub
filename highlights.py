@@ -61,7 +61,7 @@ def _db():
 
 
 def _key(m):
-    return "v3|" + (m["external_id"] or f"id-{m['id']}")  # v3: results saved before the country check are ignored
+    return "v4|" + (m["external_id"] or f"id-{m['id']}")  # v4: results saved before the country check are ignored
 
 
 def _kickoff(m):
@@ -85,6 +85,25 @@ def _coverage(tokens, title_words):
     return sum(1 for t in tokens if t in title_words) / len(tokens)
 
 
+CHANNEL_FILLER = {"fc", "cf", "afc", "sc", "ac", "official", "club", "football", "futbol", "tv", "the", "channel"}
+NOT_A_CLUB = {"fan", "fans", "echo", "news", "talk", "daily", "banter", "reaction", "reacts", "analysis", "tactics",
+              "review", "podcast", "stream", "gaming", "kids", "legends", "memories", "tribute", "edits", "edit",
+              "shorts", "clips", "moments", "zone", "world", "hub", "nation", "stand", "terrace", "supporters"}
+
+
+def _is_club_channel(channel, m):
+    """True when the uploader looks like the official channel of either team: its name is just the
+    club's name (e.g. 'Liverpool FC', 'Manchester City'), without words that mark fan or media channels."""
+    words = [w for w in _norm(channel).split() if w not in CHANNEL_FILLER]
+    if not words or any(w in NOT_A_CLUB for w in words):
+        return False
+    for team in (m["home"], m["away"]):
+        tokens = set(_tokens(team))
+        if tokens and set(words) <= tokens:  # the channel name is the club's name, nothing more
+            return True
+    return False
+
+
 def search_url(m):
     return "https://www.youtube.com/results?search_query=" + quote_plus(f"{m['home']} vs {m['away']} highlights")
 
@@ -101,7 +120,7 @@ def _search(m, key):
     """One YouTube search; returns (video_id, title, channel) or None."""
     kickoff = _kickoff(m)
     params = {
-        "part": "snippet", "type": "video", "maxResults": 15, "order": "relevance",
+        "part": "snippet", "type": "video", "maxResults": 25, "order": "relevance",
         "videoEmbeddable": "true", "relevanceLanguage": "en", "key": key, "regionCode": COUNTRY,
         "q": f"{m['home']} vs {m['away']} highlights",
         "publishedAfter": kickoff.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -130,24 +149,25 @@ def _search(m, key):
         if not any(g in title.lower() for g in GOOD_TITLE):
             continue
         score = hc + ac + 1.0
-        if any(t in channel.lower() for t in TRUSTED):
+        trusted = any(t in channel.lower() for t in TRUSTED) or _is_club_channel(channel, m)
+        if trusted:
             score += 2.0
         if "highlights" in title.lower():
             score += 0.5
-        candidates.append((score, item["id"]["videoId"], title, channel))
+        candidates.append((score, item["id"]["videoId"], title, channel, trusted))
     if not candidates:
         return None
     candidates.sort(reverse=True)
-    top = candidates[:8]
+    top = candidates[:15]
     try:
         top = _check_playable(top, key)
     except Exception as exc:
         # Could not check duration/availability: only trust well-known channels, never a random upload.
         print(f"highlights: could not check availability: {exc}")
-        top = [c for c in top if any(t in c[3].lower() for t in TRUSTED)]
+        top = [c for c in top if c[4]]
     if not top:
         return None
-    _score, vid, title, channel = top[0]
+    _score, vid, title, channel, _trusted = top[0]
     return vid, title, channel
 
 
@@ -168,8 +188,7 @@ def _check_playable(top, key):
         raise RuntimeError(f"videos.list {resp.status_code}")
     info = {v["id"]: v for v in resp.json().get("items") or []}
     scored = []
-    for score, vid, title, channel in top:
-        trusted = any(t in channel.lower() for t in TRUSTED)
+    for score, vid, title, channel, trusted in top:
         v = info.get(vid)
         if v is None:
             continue  # gone, or private
@@ -191,7 +210,7 @@ def _check_playable(top, key):
             score += 0.5
         if not rr:
             score += 1.0
-        scored.append((score, vid, title, channel))
+        scored.append((score, vid, title, channel, trusted))
     scored.sort(reverse=True)
     return scored
 
