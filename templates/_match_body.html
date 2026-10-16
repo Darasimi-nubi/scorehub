@@ -43,6 +43,12 @@
   <button type="button" class="share-btn" data-title="{{ share_title }}" data-text="{{ share_title }} · ScoreHub" data-url="{{ page_url }}">&#8599; Share</button>
   <a class="wa-btn" target="_blank" rel="noopener" href="https://wa.me/?text={{ (share_title ~ ' – ' ~ page_url)|urlencode }}">WhatsApp</a>
 </div>
+{% if m.sport == 'football' %}
+<div class="follow-row">
+  <button type="button" class="follow-btn" data-key="{{ team_key(m.home) }}" data-name="{{ m.home }}" aria-pressed="false"><span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span> {{ m.home }}</button>
+  <button type="button" class="follow-btn" data-key="{{ team_key(m.away) }}" data-name="{{ m.away }}" aria-pressed="false"><span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span> {{ m.away }}</button>
+</div>
+{% endif %}
 {% set tabs = [] %}
 {% if m.status != 'scheduled' and m.status != 'postponed' %}{% set _ = tabs.append(('summary', 'Summary')) %}{% endif %}
 {% if hl %}{% set _ = tabs.append(('highlights', 'Highlights')) %}{% endif %}

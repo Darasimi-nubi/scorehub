@@ -2,7 +2,7 @@
 
 {% block title %}ScoreHub – live football scores{% endblock %}
 {% block tzreload %}data-reload="1"{% endblock %}
-{% block navextra %}<button type="button" class="navbtn" id="favToggle" aria-pressed="false">Favourites</button>{% endblock %}
+{% block navextra %}<button type="button" class="navbtn" id="favToggle" aria-pressed="false">My teams</button>{% endblock %}
 
 {% block body %}
 <div class="wrap shell">
@@ -54,7 +54,7 @@
     {% endif %}
 
     <div id="matches">{% include "_matches.html" %}</div>
-    <p class="empty" id="nomatch" hidden>Nothing matches your search or favourites on this page.</p>
+    <p class="empty" id="nomatch" hidden>Nothing matches your search on this page. For "My teams", follow a team or star a match first.</p>
   </main>
 </div>
 {% endblock %}
@@ -66,6 +66,7 @@
     var favs = [];
     try { favs = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) {}
     var favOnly = false;
+    function myTeams() { return window.ScoreHubTeams ? window.ScoreHubTeams.list() : []; }
     var search = document.getElementById("q");
     var favBtn = document.getElementById("favToggle");
 
@@ -85,13 +86,16 @@
     // Stars, search box and the Favourites button all just show or hide rows.
     function applyFilters() {
       var q = search.value.trim().toLowerCase();
+      var mine = myTeams();
       var anyShown = false;
       document.querySelectorAll("#matches .league").forEach(function (section) {
         var shown = 0;
         section.querySelectorAll(".mrow").forEach(function (row) {
           var isFav = favs.indexOf(row.dataset.id) !== -1;
+          var isMine = isFav || mine.indexOf(row.dataset.h) !== -1 || mine.indexOf(row.dataset.a) !== -1;
           row.querySelector(".star").setAttribute("aria-pressed", isFav ? "true" : "false");
-          var ok = (!q || row.dataset.q.indexOf(q) !== -1) && (!favOnly || isFav);
+          row.classList.toggle("mine", isMine);
+          var ok = (!q || row.dataset.q.indexOf(q) !== -1) && (!favOnly || isMine);
           row.hidden = !ok;
           if (ok) shown++;
         });
@@ -145,6 +149,7 @@
       applyFilters();
     });
     search.addEventListener("input", applyFilters);
+    window.addEventListener("teams-changed", applyFilters);
 
     // Calendar button opens the date picker, then loads that day.
     var calBtn = document.getElementById("calBtn");

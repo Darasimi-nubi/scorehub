@@ -6,7 +6,7 @@
     <span class="chev" aria-hidden="true">›</span>
   </a>
   {% for m in matches %}
-  <div class="mrow {{ m.status }}" data-id="{{ m.id }}" data-q="{{ (m.home ~ ' ' ~ m.away ~ ' ' ~ league)|lower }}">
+  <div class="mrow {{ m.status }}" data-id="{{ m.id }}" data-h="{{ team_key(m.home) }}" data-a="{{ team_key(m.away) }}" data-q="{{ (m.home ~ ' ' ~ m.away ~ ' ' ~ league)|lower }}">
     <a class="mlink" href="{{ match_url(m) }}">
       <div class="st">
         {% if m.status == 'live' %}

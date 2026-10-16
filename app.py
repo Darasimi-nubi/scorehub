@@ -423,6 +423,7 @@ def code_for(league_name):
 
 app.jinja_env.globals["table_code"] = code_for
 app.jinja_env.globals["match_url"] = match_url
+app.jinja_env.globals["team_key"] = matchlinks.team_key
 app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
@@ -643,6 +644,42 @@ def partial_highlights(match_id):
 
 # ---- Pages that ad networks and visitors expect, plus crawler files ----
 
+@app.route("/following")
+def following_page():
+    return render_template("following.html")
+
+
+@app.route("/api/teams")
+def api_teams():
+    """Team search for the Following page. With no search text: teams playing soon in the leagues we put first."""
+    q = (request.args.get("q") or "").strip()[:40].replace("\\", "").replace("%", "").replace("_", "").strip()
+    if not q and (request.args.get("q") or "").strip():
+        q = "?"  # the text was only symbols: no results, not "everything"
+    db = get_db()
+    if len(q) >= 2:
+        like = "%" + q + "%"
+        rows = db.execute("""SELECT t.name, t.crest, COUNT(*) AS c FROM teams t
+                             JOIN matches m ON t.id IN (m.home_id, m.away_id)
+                             JOIN leagues l ON l.id = m.league_id
+                             WHERE l.sport = 'football' AND t.name LIKE ? GROUP BY t.id ORDER BY t.name LIKE ? DESC, c DESC, t.name LIMIT 15""",
+                          (like, q + "%")).fetchall()
+    elif q:
+        rows = []
+    else:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        found = db.execute(MATCH_SQL + """ WHERE l.sport = 'football' AND m.kickoff >= ? AND m.kickoff <= ?
+                                          ORDER BY m.kickoff""",
+                           ((now - timedelta(hours=2)).isoformat(), (now + timedelta(days=4)).isoformat())).fetchall()
+        found.sort(key=lambda r: league_order((r["sport"], r["league"], r["country"])))  # stable: keeps kickoff order inside a league
+        rows, seen = [], set()
+        for r in found:
+            for name, crest in ((r["home"], r["home_crest"]), (r["away"], r["away_crest"])):
+                if name not in seen and len(rows) < 24:
+                    seen.add(name)
+                    rows.append({"name": name, "crest": crest})
+    return jsonify(teams=[{"name": r["name"], "crest": r["crest"], "key": matchlinks.team_key(r["name"])} for r in rows])
+
+
 @app.route("/about")
 def about_page():
     return render_template("about.html")
@@ -718,7 +755,8 @@ def push_subscribe():
     if not push.valid_endpoint(sub.get("endpoint", "")) or not keys.get("p256dh") or not keys.get("auth"):
         abort(400)
     matches = body.get("matches") if isinstance(body.get("matches"), list) else []
-    push.save({"endpoint": sub["endpoint"], "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}, matches)
+    teams = body.get("teams") if isinstance(body.get("teams"), list) else []
+    push.save({"endpoint": sub["endpoint"], "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}, matches, teams)
     return jsonify(ok=True)
 
 
@@ -730,18 +768,22 @@ def push_unsubscribe():
     return jsonify(ok=True)
 
 
-def _live_for_push():
+def _rows_for_push():
+    """Football matches from the last few hours to the next half hour: enough to spot kick-offs, goals, full-times."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sql = MATCH_SQL + " WHERE l.sport = 'football' AND m.kickoff >= ? AND m.kickoff <= ?"
+    params = [(now - timedelta(hours=4)).isoformat(), (now + timedelta(minutes=push.REMIND_MINUTES + 1)).isoformat()]
     with app.app_context():
-        return live_rows("football")
+        return decorate(get_db().execute(sql, params).fetchall())
 
 
 def start_push():
     """Background goal watcher (one per process; the site runs a single worker)."""
     if not push.enabled():
-        print("push: VAPID keys not set, goal notifications are off")
+        print("push: VAPID keys not set, notifications are off")
         return
     import threading
-    threading.Thread(target=push.run, args=(_live_for_push,), daemon=True).start()
+    threading.Thread(target=push.run, args=(_rows_for_push,), daemon=True).start()
 
 
 init_db()  # also runs under gunicorn, so the tables always exist

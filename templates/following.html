@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Following – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="Follow your football teams on ScoreHub and get goal, kick-off and full-time alerts on your phone.">{% endblock %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Teams you follow</h1>
+  <p class="muted">Follow a team to see its matches under <b>My teams</b> on the scores page, and get an alert for its
+  goals, kick-off, full time and a reminder half an hour before it starts.</p>
+
+  <div class="cta" id="cta" hidden>
+    <span id="ctaText">Turn on alerts to get notified on this device.</span>
+    <button type="button" id="ctaBtn">Turn on alerts</button>
+  </div>
+
+  <h2>Following</h2>
+  <ul class="team-list" id="mine"></ul>
+  <p class="empty" id="none">You aren't following any team yet. Search for one below, or pick from the list.</p>
+
+  <h2>Find a team</h2>
+  <label class="search wide">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="tq" type="search" placeholder="Search football teams" autocomplete="off" aria-label="Search football teams">
+  </label>
+  <h3 id="listTitle">Playing soon</h3>
+  <ul class="team-list" id="found"></ul>
+  <p class="empty" id="nofound" hidden>No team found. Only teams with matches on ScoreHub can be followed.</p>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var T = window.ScoreHubTeams;
+  var mine = document.getElementById("mine"), found = document.getElementById("found");
+  function row(team, key) {
+    var li = document.createElement("li");
+    var img = document.createElement("img");
+    if (team.crest) { img.src = team.crest; img.alt = ""; img.loading = "lazy"; li.appendChild(img); }
+    var name = document.createElement("span"); name.textContent = team.name; li.appendChild(name);
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "follow-btn"; b.dataset.key = key; b.dataset.name = team.name; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = '<span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span>';
+    li.appendChild(b);
+    return li;
+  }
+  function drawMine() {
+    var names = T.names(), keys = T.list();
+    mine.innerHTML = "";
+    keys.forEach(function (k) { mine.appendChild(row({name: names[k] || k.replace(/-/g, " ")}, k)); });
+    document.getElementById("none").hidden = keys.length > 0;
+    mine.hidden = keys.length === 0;
+  }
+  var seq = 0;
+  function search(q) {
+    var n = ++seq;
+    fetch("/api/teams?q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (d) {
+      if (n !== seq) return;
+      found.innerHTML = "";
+      d.teams.forEach(function (t) { found.appendChild(row(t, t.key)); });
+      document.getElementById("nofound").hidden = d.teams.length > 0;
+      document.getElementById("listTitle").textContent = q ? "Results" : "Playing soon";
+    }).catch(function () {});
+  }
+  var tq = document.getElementById("tq"), t = null;
+  tq.addEventListener("input", function () { clearTimeout(t); t = setTimeout(function () { search(tq.value.trim()); }, 250); });
+
+  drawMine(); search("");
+
+  // Alerts call-to-action, shown once at least one team is followed
+  var bell = document.getElementById("bellBtn"), cta = document.getElementById("cta");
+  function paintCta() {
+    if (!bell || bell.hidden || !T.list().length) { cta.hidden = true; return; }
+    var on = bell.classList.contains("bell-on");
+    cta.hidden = false;
+    document.getElementById("ctaText").textContent = on ? "Alerts are on for this device." : "Turn on alerts to get notified on this device.";
+    document.getElementById("ctaBtn").hidden = on;
+  }
+  document.getElementById("ctaBtn").addEventListener("click", function () { bell.click(); });
+  window.addEventListener("teams-changed", paintCta);
+  if (bell) new MutationObserver(paintCta).observe(bell, {attributes: true, attributeFilter: ["class", "hidden"]});
+  setTimeout(paintCta, 800); paintCta();
+})();
+</script>
+{% endblock %}

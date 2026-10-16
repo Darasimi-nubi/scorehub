@@ -33,10 +33,11 @@
     <div class="wrap top-row">
       <a class="brand" href="{{ url_for('index') }}">ScoreHub</a>
       <nav class="main-nav">
-        <a class="on" href="{{ url_for('index') }}">Scores</a>
+        <a class="{{ 'on' if request.endpoint in ('index', 'match_page') }}" href="{{ url_for('index') }}">Scores</a>
+        <a class="{{ 'on' if request.endpoint == 'following_page' }}" href="{{ url_for('following_page') }}">Following</a>
         {% block navextra %}{% endblock %}
       </nav>
-      <button type="button" class="bell" id="bellBtn" hidden aria-pressed="false" title="Goal alerts for your starred matches">&#128276; <span>Goal alerts</span></button>
+      <button type="button" class="bell" id="bellBtn" hidden aria-pressed="false" title="Notifications for your teams and starred matches">&#128276; <span>Alerts</span></button>
     </div>
     {% set sp = sport|default('all') %}
     <div class="wrap pills">
@@ -55,6 +56,7 @@
       <p>&copy; ScoreHub. Live scores, results and tables for football, basketball, hockey, tennis and cricket.</p>
     </div>
   </footer>
+  <script src="{{ url_for('static', filename='follow.js') }}"></script>
   <script src="{{ url_for('static', filename='push.js') }}"></script>
   <script src="{{ url_for('static', filename='install.js') }}" defer></script>
   {% block scripts %}{% endblock %}

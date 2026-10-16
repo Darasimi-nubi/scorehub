@@ -21,6 +21,15 @@ def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text).strip("-") or "team"
 
 
+_NOISE = {"fc", "afc", "cf", "sc"}
+
+
+def team_key(name):
+    """A short stable key for a team ("Arsenal FC" and "Arsenal" both give "arsenal"), used for following teams."""
+    parts = [p for p in slugify(name).split("-") if p and p not in _NOISE]
+    return "-".join(parts) or slugify(name)
+
+
 def base_slug(home, away, kickoff):
     return f"{slugify(home)}-v-{slugify(away)}-{(kickoff or '')[:10]}"
 

@@ -1,5 +1,5 @@
-// Goal alerts button: asks permission, subscribes this browser, and tells the server
-// which starred matches to send goals for. Re-registers on every visit (the server
+// Alerts button: asks permission, subscribes this browser, and tells the server
+// which followed teams and starred matches to send goals for. Re-registers on every visit (the server
 // forgets subscribers if its storage is wiped on a redeploy).
 (function () {
   var btn = document.getElementById("bellBtn");
@@ -20,11 +20,12 @@
     btn.hidden = false;
     btn.classList.toggle("bell-on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.querySelector("span").textContent = on ? "Alerts on" : "Goal alerts";
+    btn.querySelector("span").textContent = on ? "Alerts on" : "Alerts";
   }
   function register() { return navigator.serviceWorker.register("/sw.js"); }
   function currentSub() { return register().then(function () { return navigator.serviceWorker.ready; }).then(function (r) { return r.pushManager.getSubscription(); }); }
-  function sync(sub) { return post("/api/push/subscribe", {subscription: sub.toJSON(), matches: favs()}); }
+  function teams() { return window.ScoreHubTeams ? window.ScoreHubTeams.list() : []; }
+  function sync(sub) { return post("/api/push/subscribe", {subscription: sub.toJSON(), matches: favs(), teams: teams()}); }
 
   fetch("/api/push/key").then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (cfg) {
     // Notifications are available on this server: show the button.
@@ -32,9 +33,9 @@
     if (Notification.permission === "granted") {
       currentSub().then(function (sub) { if (sub) { show(true); sync(sub); } });
     }
-    window.addEventListener("favs-changed", function () {
-      currentSub().then(function (sub) { if (sub) sync(sub); });
-    });
+    function resync() { currentSub().then(function (sub) { if (sub) sync(sub); }); }
+    window.addEventListener("favs-changed", resync);
+    window.addEventListener("teams-changed", resync);
 
     btn.addEventListener("click", function () {
       currentSub().then(function (sub) {
@@ -53,7 +54,10 @@
           }).then(function (s) {
             return sync(s).then(function () {
               show(true);
-              if (!favs().length) alert("Goal alerts are on. Tap the ☆ next to a match to get its goals.");
+              if (!favs().length && !teams().length) {
+                alert("Alerts are on. Pick the teams you want goals, kick-off and full-time alerts for.");
+                if (location.pathname !== "/following") location.href = "/following";
+              }
             });
           });
         });
