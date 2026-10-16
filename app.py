@@ -1,3 +1,4 @@
+import gzip
 import os
 import sqlite3
 import time
@@ -5,7 +6,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 import requests
-from flask import Flask, Response, abort, g, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from config import load_env
 
@@ -25,6 +26,8 @@ ADSENSE_CLIENT = (os.environ.get("ADSENSE_CLIENT") or "").strip()
 CONTACT_EMAIL = (os.environ.get("CONTACT_EMAIL") or "").strip()
 SITE_URL = (os.environ.get("SITE_URL") or "https://scorehubber.name.ng").rstrip("/")
 
+import card  # share-preview pictures
+import matchlinks  # permanent match ids and readable links
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 import highlights  # match highlight videos (YOUTUBE_API_KEY)
 
@@ -44,6 +47,63 @@ MATCH_SQL = """
     JOIN teams h ON h.id = m.home_id
     JOIN teams a ON a.id = m.away_id
 """
+
+
+# ---- Speed: smaller downloads, cached static files, and a few seconds of memory for busy pages ----
+
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000  # static files carry their file date in the link (see below), so they can be kept a year
+
+COMPRESSIBLE = {"text/html", "text/css", "text/plain", "text/javascript", "application/javascript", "application/json",
+                "application/xml", "application/manifest+json", "image/svg+xml"}
+
+
+@app.url_defaults
+def version_static(endpoint, values):
+    """/static/style.css becomes /static/style.css?v=<file date>, so a changed file is fetched again but an unchanged one never is."""
+    if endpoint == "static" and "v" not in values and values.get("filename"):
+        try:
+            values["v"] = int(os.path.getmtime(os.path.join(app.static_folder, values["filename"])))
+        except OSError:
+            pass
+
+
+@app.after_request
+def compress(resp):
+    """gzip text responses for browsers that accept it: far less data on slow mobile connections."""
+    if (resp.status_code != 200 or "Content-Encoding" in resp.headers or resp.mimetype not in COMPRESSIBLE
+            or "gzip" not in request.headers.get("Accept-Encoding", "")):
+        return resp
+    resp.direct_passthrough = False
+    data = resp.get_data()
+    if len(data) < 600:
+        return resp
+    resp.set_data(gzip.compress(data, 5))
+    resp.headers["Content-Encoding"] = "gzip"
+    resp.headers.add("Vary", "Accept-Encoding")
+    return resp
+
+
+_page_cache = {}  # (path, query, timezone) -> (made_at, html)
+
+
+def cached_page(seconds):
+    """Remember a page's HTML briefly, so a crowd watching the same scores costs one render, not hundreds."""
+    def wrap(view):
+        from functools import wraps
+
+        @wraps(view)
+        def inner(*args, **kwargs):
+            key = (request.path, request.query_string, request.cookies.get("tz", "0"))
+            hit = _page_cache.get(key)
+            if hit and time.time() - hit[0] < seconds:
+                return hit[1]
+            html = view(*args, **kwargs)
+            if len(_page_cache) > 300:
+                _page_cache.clear()
+            _page_cache[key] = (time.time(), html)
+            return html
+        return inner
+    return wrap
 
 
 def get_db():
@@ -77,6 +137,7 @@ def init_db():
                 ALTER TABLE leagues_new RENAME TO leagues;
                 PRAGMA foreign_keys = ON;
             """)
+        matchlinks.ensure_schema(conn)
 
 
 def viewer_offset():
@@ -89,6 +150,18 @@ def viewer_offset():
 
 def local_today(offset):
     return (datetime.now(timezone.utc) + timedelta(minutes=offset)).date()
+
+
+# Shown first on the scores page, in this order, because most visitors follow Nigerian and African football.
+TOP_LEAGUES = ["NPFL", "Africa Cup of Nations", "AFCON Qualifiers", "CAF Champions League", "CAF Confederation Cup",
+               "World Cup Qualifiers (CAF)", "International Friendlies"]
+
+
+def league_order(key):
+    sport, league, _country = key
+    sport_rank = SPORTS.index(sport) if sport in SPORTS else len(SPORTS)
+    league_rank = TOP_LEAGUES.index(league) if league in TOP_LEAGUES else len(TOP_LEAGUES)
+    return (sport_rank, league_rank, league)
 
 
 def load_groups(sport, day, league=None, offset=0, live=False):
@@ -113,7 +186,7 @@ def load_groups(sport, day, league=None, offset=0, live=False):
     groups = OrderedDict()
     for row in rows:
         groups.setdefault((row["sport"], row["league"], row["country"]), []).append(row)
-    return groups
+    return OrderedDict(sorted(groups.items(), key=lambda kv: league_order(kv[0])))
 
 
 def estimate_clock(kickoff, now):
@@ -179,6 +252,26 @@ def live_rows(sport, league=None):
 def get_match(match_id):
     row = get_db().execute(MATCH_SQL + " WHERE m.id = ?", (match_id,)).fetchone()
     return decorate([row])[0] if row else None
+
+
+def get_match_by_slug(slug):
+    row = get_db().execute(MATCH_SQL + " WHERE m.slug = ?", (slug,)).fetchone()
+    return decorate([row])[0] if row else None
+
+
+def share_info(m):
+    """Short score text and description used in the page title and share previews."""
+    started = m["status"] in ("live", "finished") and m.get("home_score") is not None and m.get("away_score") is not None
+    score = f"{m['home_score']}–{m['away_score']}" if started else "v"
+    when = card.status_text(m).title() if m["status"] != "scheduled" else "Kick-off " + card.status_text(m)
+    tail = "Live score, stats, line-ups and highlights on ScoreHub." if m["status"] != "scheduled" else \
+           "Live score, line-ups and match centre on ScoreHub."
+    return score, " ".join(f"{m['league']}: {m['home']} {score} {m['away']}. {when}. {tail}".split())
+
+
+def match_url(m):
+    """Permanent, readable link to a match page."""
+    return url_for("match_page", slug=m["slug"] or str(m["id"]))
 
 
 def _lineup(team):
@@ -329,6 +422,8 @@ def code_for(league_name):
 
 
 app.jinja_env.globals["table_code"] = code_for
+app.jinja_env.globals["match_url"] = match_url
+app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
@@ -456,6 +551,7 @@ app.jinja_env.globals.update(badge_hue=badge_hue, initials=initials)
 
 
 @app.route("/")
+@cached_page(5)
 def index():
     sport, day, league, live, offset = parse_args()
     return render_template("index.html", groups=load_groups(sport, day, league, offset, live),
@@ -465,6 +561,7 @@ def index():
 
 
 @app.route("/partial/matches")
+@cached_page(5)
 def partial_matches():
     """HTML fragment the page polls to refresh live scores."""
     sport, day, league, live, offset = parse_args()
@@ -487,21 +584,51 @@ def match_or_404(match_id):
     return m
 
 
-@app.route("/match/<int:match_id>")
-def match_page(match_id):
-    m = match_or_404(match_id)
+@app.route("/match/<slug>")
+def match_page(slug):
+    m = get_match_by_slug(slug)
+    if m is None and slug.isdigit():  # an old numeric link: send it to the readable one
+        old = get_match(int(slug))
+        if old is None:
+            abort(404)
+        if old["slug"]:
+            return redirect(match_url(old), code=301)
+        m = old  # no readable link yet (should not happen): show the match as it is
+    if m is None:
+        abort(404)
     # "All matches" should return to the day the viewer sees this game on (their local day).
     kickoff = datetime.fromisoformat(m["kickoff"])
     back_date = (kickoff + timedelta(minutes=viewer_offset())).date().isoformat()
+    share_score, share_desc = share_info(m)
     return render_template("match.html", m=m, detail=fetch_detail(m), hl=highlights.get(m),
-                           back_date=back_date)
+                           back_date=back_date, share_score=share_score, share_desc=share_desc)
+
+
+@app.route("/card/<slug>.png")
+def match_card(slug):
+    """The picture that appears when a match link is shared."""
+    m = get_match_by_slug(slug)
+    if m is None:
+        abort(404)
+    resp = Response(card.png_for(m, SITE_URL.split("://", 1)[-1]), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=%d" % (60 if m["status"] == "live" else 600)
+    return resp
+
+
+@app.route("/card/site.png")
+def site_card():
+    resp = Response(card.site_card(SITE_URL.split("://", 1)[-1]), mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 @app.route("/partial/match/<int:match_id>")
 def partial_match(match_id):
     """HTML fragment the match page polls to refresh the score and goals."""
     m = match_or_404(match_id)
-    return render_template("_match_body.html", m=m, detail=fetch_detail(m), hl=highlights.get(m))
+    share_score, share_desc = share_info(m)
+    return render_template("_match_body.html", m=m, detail=fetch_detail(m), hl=highlights.get(m),
+                           share_score=share_score, share_desc=share_desc)
 
 
 @app.route("/partial/highlights/<int:match_id>")
@@ -555,6 +682,11 @@ def robots_txt():
 def sitemap_xml():
     paths = ["/", "/?sport=football", "/?sport=basketball", "/?sport=hockey", "/?sport=tennis", "/?sport=cricket",
              "/about", "/privacy", "/terms", "/contact"]
+    now = datetime.now(timezone.utc)
+    rows = get_db().execute(
+        "SELECT slug, kickoff FROM matches WHERE slug IS NOT NULL AND kickoff BETWEEN ? AND ? ORDER BY kickoff DESC LIMIT 1000",
+        ((now - timedelta(days=3)).isoformat(), (now + timedelta(days=3)).isoformat())).fetchall()
+    paths += [f"/match/{r['slug']}" for r in rows]
     body = "".join(f"<url><loc>{SITE_URL}{p.replace('&', '&amp;')}</loc></url>" for p in paths)
     return Response('<?xml version="1.0" encoding="UTF-8"?>'
                     f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',
@@ -564,7 +696,7 @@ def sitemap_xml():
 @app.route("/sw.js")
 def service_worker():
     """Must be served from the site root so it can receive pushes for every page."""
-    resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
+    resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript", max_age=0)
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
@@ -625,7 +757,7 @@ def start_sync():
     start_push()
     threading.Thread(
         target=sync.run_football, args=(sync.FootballDataProvider(FOOTBALL_DATA_KEY),),
-        kwargs={"extras": (sync.EspnBasketballProvider(), sync.EspnHockeyProvider(),
+        kwargs={"extras": (sync.EspnSoccerProvider(), sync.EspnBasketballProvider(), sync.EspnHockeyProvider(),
                                        sync.EspnTennisProvider(), sync.EspnCricketProvider())}, daemon=True
     ).start()
 

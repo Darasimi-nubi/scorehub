@@ -7,19 +7,19 @@
   </a>
   {% for m in matches %}
   <div class="mrow {{ m.status }}" data-id="{{ m.id }}" data-q="{{ (m.home ~ ' ' ~ m.away ~ ' ' ~ league)|lower }}">
-    <a class="mlink" href="{{ url_for('match_page', match_id=m.id) }}">
+    <a class="mlink" href="{{ match_url(m) }}">
       <div class="st">
         {% if m.status == 'live' %}
-          {% if m.period == 'HT' %}HT{% else %}<span><span class="live-dot"></span>{{ m.clock or m.period }}</span>{% if sport == 'basketball' and m.period %}<small>{{ m.period }}</small>{% endif %}{% endif %}
-        {% elif m.status == 'finished' %}FT
+          {% if m.period == 'HT' %}HT{% else %}<span><span class="live-dot"></span>{{ m.clock or m.period }}</span>{% if m.sport != 'football' and m.period %}<small>{{ m.period }}</small>{% endif %}{% endif %}
+        {% elif m.status == 'finished' %}{{ 'FT' if m.sport == 'football' or not m.period else m.period }}
         {% elif m.status == 'postponed' %}PPD
         {% else %}<span class="kick" data-utc="{{ m.kickoff }}">{{ m.kickoff[11:16] }}</span>{% endif %}
       </div>
       <div class="tms">
-        <div class="t">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="" loading="lazy">{% endif %}<span>{{ m.home }}</span></div>
-        <div class="t">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="" loading="lazy">{% endif %}<span>{{ m.away }}</span></div>
+        <div class="t">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.home }}</span></div>
+        <div class="t">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.away }}</span></div>
       </div>
-      <div class="sc">
+      <div class="sc{{ ' txt' if m.sport == 'cricket' }}">
         <b>{{ m.home_score if m.home_score is not none else '' }}</b>
         <b>{{ m.away_score if m.away_score is not none else '' }}</b>
       </div>

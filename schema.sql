@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE TABLE IF NOT EXISTS matches (
     id           INTEGER PRIMARY KEY,
     external_id  TEXT UNIQUE,              -- id from the data provider
+    slug         TEXT,                     -- readable link part, e.g. arsenal-v-chelsea-2026-10-16
     league_id    INTEGER NOT NULL REFERENCES leagues(id),
     home_id      INTEGER NOT NULL REFERENCES teams(id),
     away_id      INTEGER NOT NULL REFERENCES teams(id),

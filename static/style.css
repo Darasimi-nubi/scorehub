@@ -324,3 +324,15 @@ a.arrow:hover { background: var(--card); }
 .doc ul { padding-left: 20px; }
 .doc a { color: var(--accent, #f5b335); }
 .doc .updated { color: #8a8a8a; font-size: .85rem; margin: 0 0 14px; }
+
+/* Share + install */
+.share-row { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+.share-btn, .wa-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line, #2a2a2a);
+  background: none; color: inherit; font: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; text-decoration: none; }
+.share-btn:hover, .wa-btn:hover { background: rgba(255,255,255,.06); }
+.wa-btn { border-color: #1f6b46; color: #6fe3a3; }
+.install-bar { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 50; display: flex; align-items: center; gap: 10px; max-width: 480px; margin: 0 auto;
+  padding: 10px 12px 10px 16px; border-radius: 14px; background: #1b2029; border: 1px solid #2f3643; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.install-bar span { flex: 1; font-size: .92rem; }
+.install-go { padding: 7px 14px; border-radius: 999px; border: 0; background: var(--accent, #f5b335); color: #111; font: inherit; font-weight: 700; cursor: pointer; }
+.install-x { background: none; border: 0; color: #9a9a9a; font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 4px; }

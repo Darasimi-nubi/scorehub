@@ -112,15 +112,24 @@
       document.querySelector(".live-btn").classList.toggle("has", n > 0);
     }
 
+    var timer = null;
+    function schedule() {
+      clearTimeout(timer);
+      // every 10 s while something is live, once a minute otherwise
+      timer = setTimeout(refresh, document.querySelector("#matches .mrow.live") ? 10000 : 60000);
+    }
     function refresh() {
+      if (document.hidden) { schedule(); return; }  // nobody is looking: save their data and battery
       fetch("/partial/matches" + window.location.search)
         .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function (html) {
           document.getElementById("matches").innerHTML = html;
           localiseTimes(); applyFilters(); updateLiveCount();
         })
-        .catch(function () {});
+        .catch(function () {})
+        .then(schedule);
     }
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
 
     document.addEventListener("click", function (e) {
       var star = e.target.closest(".star");
@@ -152,7 +161,7 @@
     });
 
     localiseTimes(); applyFilters();
-    setInterval(refresh, 10000);
+    schedule();
   })();
 </script>
 {% endblock %}

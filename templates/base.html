@@ -4,6 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ScoreHub{% endblock %}</title>
+  {% block meta %}
+  <meta name="description" content="Live scores, results, tables and highlights for football, basketball, hockey, tennis and cricket.">
+  <link rel="canonical" href="{{ site_url }}{{ request.path }}">
+  <meta property="og:site_name" content="ScoreHub">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ScoreHub – live scores">
+  <meta property="og:description" content="Live scores, results, tables and highlights for football, basketball, hockey, tennis and cricket.">
+  <meta property="og:url" content="{{ site_url }}{{ request.path }}">
+  <meta property="og:image" content="{{ site_url }}/card/site.png">
+  <meta name="twitter:card" content="summary_large_image">
+  {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -45,6 +56,7 @@
     </div>
   </footer>
   <script src="{{ url_for('static', filename='push.js') }}"></script>
+  <script src="{{ url_for('static', filename='install.js') }}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

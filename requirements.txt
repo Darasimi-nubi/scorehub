@@ -3,3 +3,4 @@ requests>=2.31
 gunicorn>=21.2
 pywebpush>=2.0
 cryptography>=42
+Pillow>=10.1

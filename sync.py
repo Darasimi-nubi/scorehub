@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from config import load_env
+import matchlinks
 
 load_env()  # reads FOOTBALL_DATA_KEY from the .env file, if there is one
 
@@ -177,29 +178,45 @@ class EspnProvider:
     """
 
     SPORT = ""
+    ROW_SPORT = None      # the sport stored on our rows, when ESPN's name for it differs (soccer -> football)
+    ONLY_TEAMS = {}       # espn slug -> words; only matches whose team names contain one of them are kept
     LEAGUES = []          # (espn slug, display name, country)
     REGULATION = 4        # periods before overtime
     PREFIX = "Q"          # Q1.. for basketball, P1.. for hockey
     URL = "https://site.api.espn.com/apis/site/v2/sports/{sport}/{slug}/scoreboard"
 
+    def _offsets(self, days_back, days_ahead):
+        return range(-min(days_back, 3), days_ahead + 1)
+
     def fetch_range(self, days_back, days_ahead):
         """One request per league per day: ESPN's plain ?dates=YYYYMMDD form (ranges get a 400)."""
         today = datetime.now(timezone.utc).date()
         found = {}
+        dead = self.__dict__.setdefault("_dead", set())
         for slug, league, country in self.LEAGUES:
-            for offset in range(-min(days_back, 3), days_ahead + 1):
+            if slug in dead:
+                continue
+            for offset in self._offsets(days_back, days_ahead):
                 day = today + timedelta(days=offset)
                 try:
                     resp = requests.get(self.URL.format(sport=self.SPORT, slug=slug), params={"dates": f"{day:%Y%m%d}"},
                                         headers={"User-Agent": "Mozilla/5.0 ScoreHub"}, timeout=15)
+                    if resp.status_code == 404:  # ESPN has no such feed: say so once and stop asking
+                        print(f"{self.SPORT}: ESPN has no feed called '{slug}' ({league}); skipping it")
+                        dead.add(slug)
+                        break
                     resp.raise_for_status()
                     for event in resp.json().get("events", []):
                         m = self._convert(event, league, country)
-                        if m:
+                        if m and self._wanted(slug, m):
                             found[m["external_id"]] = m
                 except Exception as exc:
                     print(f"{self.SPORT} sync ({slug} {day}) failed: {exc}")
         return list(found.values())
+
+    def _wanted(self, slug, m):
+        words = self.ONLY_TEAMS.get(slug)
+        return not words or any(w.lower() in (m["home"] + " " + m["away"]).lower() for w in words)
 
     def fetch_matches(self):
         return self.fetch_range(1, 1)
@@ -254,7 +271,7 @@ class EspnProvider:
         played = status in ("live", "finished")
         return {
             "external_id": f"espn-{self.SPORT}-{event['id']}",
-            "sport": self.SPORT,
+            "sport": self.ROW_SPORT or self.SPORT,
             "league": league, "country": country,
             "home": team_name(teams["home"]), "away": team_name(teams["away"]),
             "home_crest": (teams["home"].get("team") or {}).get("logo"),
@@ -265,6 +282,34 @@ class EspnProvider:
             "away_score": score(teams["away"]) if played else None,
             "period": period, "clock": clock,
         }
+
+
+class EspnSoccerProvider(EspnProvider):
+    """Football competitions that football-data.org's free plan does not cover: the Nigerian league,
+    the CAF competitions, the Africa Cup of Nations and Super Eagles matches."""
+
+    SPORT = "soccer"        # ESPN's name
+    ROW_SPORT = "football"  # ours
+    REGULATION = 2
+    EVERY = 90
+    LEAGUES = [
+        ("nga.1", "NPFL", "Nigeria"),
+        ("caf.nations", "Africa Cup of Nations", "Africa"),
+        ("caf.nations_qual", "AFCON Qualifiers", "Africa"),
+        ("caf.champions", "CAF Champions League", "Africa"),
+        ("caf.confed", "CAF Confederation Cup", "Africa"),
+        ("fifa.worldq.caf", "World Cup Qualifiers (CAF)", "Africa"),
+        ("fifa.friendly", "International Friendlies", "World"),
+    ]
+    ONLY_TEAMS = {"fifa.friendly": ("Nigeria",)}  # friendlies from all over the world: keep Super Eagles games
+
+    def _period_label(self, n, detail=""):
+        return {1: "1H", 2: "2H", 3: "ET", 4: "ET", 5: "PEN"}.get(n)
+
+    def _offsets(self, days_back, days_ahead):
+        if days_back <= 1 and days_ahead <= 1:  # the frequent live refresh: just today (and yesterday just after midnight UTC)
+            return (-1, 0) if datetime.now(timezone.utc).hour < 4 else (0,)
+        return range(-min(days_back, 3), days_ahead + 1)
 
 
 class EspnBasketballProvider(EspnProvider):
@@ -451,17 +496,22 @@ def upsert(conn, m):
             conn.execute("UPDATE teams SET crest = ? WHERE name = ?", (crest, name))
         team_ids.append(conn.execute("SELECT id FROM teams WHERE name = ?", (name,)).fetchone()[0])
 
+    existing = conn.execute("SELECT id, slug FROM matches WHERE external_id = ?", (m["external_id"],)).fetchone()
+    match_id = existing[0] if existing else matchlinks.free_id(conn, m["external_id"])
+    slug = (existing[1] if existing and existing[1] else
+            matchlinks.free_slug(conn, matchlinks.base_slug(m["home"], m["away"], m["kickoff"]), m["external_id"]))
     conn.execute(
         """
-        INSERT INTO matches (external_id, league_id, home_id, away_id, kickoff, status,
+        INSERT INTO matches (id, slug, external_id, league_id, home_id, away_id, kickoff, status,
                              home_score, away_score, period, clock, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(external_id) DO UPDATE SET
+            slug=COALESCE(matches.slug, excluded.slug),
             kickoff=excluded.kickoff, status=excluded.status,
             home_score=excluded.home_score, away_score=excluded.away_score,
             period=excluded.period, clock=excluded.clock, updated_at=excluded.updated_at
         """,
-        (m["external_id"], league_id, team_ids[0], team_ids[1], m["kickoff"], m["status"],
+        (match_id, slug, m["external_id"], league_id, team_ids[0], team_ids[1], m["kickoff"], m["status"],
          m["home_score"], m["away_score"], m["period"], m["clock"],
          datetime.now(timezone.utc).isoformat()),
     )
@@ -469,6 +519,7 @@ def upsert(conn, m):
 
 def save_matches(matches):
     with sqlite3.connect(DB_PATH) as conn:
+        matchlinks.ensure_schema(conn)
         for m in matches:
             upsert(conn, m)
     return len(matches)

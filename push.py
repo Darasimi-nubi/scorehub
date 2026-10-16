@@ -113,7 +113,7 @@ def goal_payload(row, side):
     team = row["home"] if side == "home" else row["away"]
     minute = f" · {row['clock']}" if row.get("clock") else ""
     return {"title": f"⚽ GOAL! {row['home']} {hs}–{as_} {row['away']}",
-            "body": f"{team} scored{minute}", "url": f"/match/{row['id']}", "tag": f"goal-{row['id']}"}
+            "body": f"{team} scored{minute}", "url": f"/match/{row.get('slug') or row['id']}", "tag": f"goal-{row['id']}"}
 
 
 def notify(goals, sender=send):
