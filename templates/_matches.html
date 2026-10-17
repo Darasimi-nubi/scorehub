@@ -14,6 +14,7 @@
         {% elif m.status == 'finished' %}{{ 'FT' if m.sport == 'football' or not m.period else m.period }}
         {% elif m.status == 'postponed' %}PPD
         {% else %}<span class="kick" data-utc="{{ m.kickoff }}">{{ m.kickoff[11:16] }}</span>{% endif %}
+        {% if show_date and m.status != 'live' %}<small class="kday" data-utc="{{ m.kickoff }}">{{ m.kickoff[5:10] }}</small>{% endif %}
       </div>
       <div class="tms">
         <div class="t">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.home }}</span></div>
@@ -31,6 +32,6 @@
   {% endfor %}
 </section>
 {% else %}
-<p class="empty">No matches for this selection.</p>
+<p class="empty">{{ empty_text or "No matches for this selection." }}</p>
 {% endfor %}
 <span id="liveData" data-n="{{ live_count }}" hidden></span>

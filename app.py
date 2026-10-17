@@ -561,6 +561,23 @@ def index():
                            leagues=league_chips(sport))
 
 
+@app.route("/partial/myteams")
+def partial_myteams():
+    """Upcoming and live football for the followed teams and starred matches, over the next two weeks."""
+    keys = {k for k in (request.args.get("teams") or "").split(",") if k}
+    ids = {int(i) for i in (request.args.get("ids") or "").split(",") if i.isdigit()}
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sql = MATCH_SQL + " WHERE l.sport = 'football' AND m.kickoff >= ? AND m.kickoff <= ? ORDER BY m.kickoff"
+    rows = get_db().execute(sql, ((now - timedelta(hours=3)).isoformat(), (now + timedelta(days=14)).isoformat())).fetchall()
+    rows = [r for r in rows if r["id"] in ids or matchlinks.team_key(r["home"]) in keys or matchlinks.team_key(r["away"]) in keys][:60]
+    groups = OrderedDict()
+    for row in decorate(rows):
+        groups.setdefault((row["sport"], row["league"], row["country"]), []).append(row)
+    groups = OrderedDict(sorted(groups.items(), key=lambda kv: league_order(kv[0])))
+    return render_template("_matches.html", groups=groups, live_count=live_count("all"), show_date=True,
+                           empty_text="No upcoming matches for your teams in the next two weeks.")
+
+
 @app.route("/partial/matches")
 @cached_page(5)
 def partial_matches():
@@ -643,6 +660,52 @@ def partial_highlights(match_id):
 
 
 # ---- Pages that ad networks and visitors expect, plus crawler files ----
+
+# Player search spends the shared API-Football allowance, so each visitor gets only a few searches a minute.
+_player_hits = {}
+
+
+def _player_rate_ok():
+    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
+    now = time.time()
+    recent = [t for t in _player_hits.get(ip, []) if now - t < 60]
+    if len(recent) >= 12:
+        _player_hits[ip] = recent
+        return False
+    _player_hits[ip] = recent + [now]
+    if len(_player_hits) > 2000:
+        _player_hits.clear()
+    return True
+
+
+@app.route("/players")
+def players_page():
+    return render_template("players.html", enabled=bool(API_FOOTBALL_KEY))
+
+
+@app.route("/api/players")
+def api_players():
+    if not API_FOOTBALL_KEY:
+        return jsonify(players=[], error="off")
+    if not _player_rate_ok():
+        return jsonify(players=[], error="slow"), 429
+    import apifootball
+    players, error = apifootball.search_players(request.args.get("q", ""), API_FOOTBALL_KEY)
+    return jsonify(players=players, error=error)
+
+
+@app.route("/player/<int:pid>")
+def player_page(pid):
+    if not API_FOOTBALL_KEY:
+        abort(404)
+    if not _player_rate_ok():
+        return render_template("player.html", p=None, error="slow"), 429
+    import apifootball
+    profile, error = apifootball.player_profile(pid, API_FOOTBALL_KEY)
+    if error == "missing":
+        abort(404)
+    return render_template("player.html", p=profile, error=error), (200 if profile else 503)
+
 
 @app.route("/following")
 def following_page():

@@ -35,6 +35,7 @@
       <nav class="main-nav">
         <a class="{{ 'on' if request.endpoint in ('index', 'match_page') }}" href="{{ url_for('index') }}">Scores</a>
         <a class="{{ 'on' if request.endpoint == 'following_page' }}" href="{{ url_for('following_page') }}">Following</a>
+        <a class="{{ 'on' if request.endpoint in ('players_page', 'player_page') }}" href="{{ url_for('players_page') }}">Players</a>
         {% block navextra %}{% endblock %}
       </nav>
       <button type="button" class="bell" id="bellBtn" hidden aria-pressed="false" title="Notifications for your teams and starred matches">&#128276; <span>Alerts</span></button>

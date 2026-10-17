@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name if p else 'Player' }} – ScoreHub{% endblock %}
+{% block meta %}{% if p %}<meta name="description" content="{{ p.name }}{% if p.position %}, {{ p.position|lower }}{% endif %}{% if p.nationality %} from {{ p.nationality }}{% endif %}. Profile on ScoreHub.">
+  <meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('players_page') }}">&lsaquo; Players</a>
+  {% if not p %}
+  <p class="empty">{% if error == 'busy' %}Player pages have reached their limit for today. Please try again tomorrow.
+  {% elif error == 'slow' %}You're opening pages too fast. Wait a few seconds and try again.
+  {% else %}Couldn't load this player right now. Try again in a moment.{% endif %}</p>
+  {% else %}
+  <div class="pcard">
+    {% if p.photo %}<img src="{{ p.photo }}" alt="{{ p.name }}" width="96" height="96">{% endif %}
+    <div>
+      <h1>{{ p.name }}</h1>
+      <p class="muted">{{ [p.position, p.nationality]|select|join(' · ') }}</p>
+    </div>
+  </div>
+  <dl class="pfacts">
+    {% if p.firstname or p.lastname %}<div><dt>Full name</dt><dd>{{ [p.firstname, p.lastname]|select|join(' ') }}</dd></div>{% endif %}
+    {% if p.age %}<div><dt>Age</dt><dd>{{ p.age }}</dd></div>{% endif %}
+    {% if p.birth %}<div><dt>Born</dt><dd>{{ p.birth }}{% if p.birthplace %}, {{ p.birthplace }}{% endif %}</dd></div>{% endif %}
+    {% if p.height %}<div><dt>Height</dt><dd>{{ p.height }}</dd></div>{% endif %}
+    {% if p.weight %}<div><dt>Weight</dt><dd>{{ p.weight }}</dd></div>{% endif %}
+  </dl>
+  {% if p.teams %}
+  <h2>Teams</h2>
+  <ul class="team-list">
+    {% for t in p.teams %}
+    <li>{% if t.logo %}<img src="{{ t.logo }}" alt="" loading="lazy">{% endif %}<span>{{ t.name }}</span>
+      <small class="muted">{{ t.first ~ '–' ~ t.last if t.first != t.last else t.last }}</small></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+</main>
+{% endblock %}

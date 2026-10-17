@@ -585,3 +585,79 @@ def fetch_detail(m, key):
                    "They come back after midnight UTC (1 am in Lagos).")
                   if played and events is None and budget_used_up() else None,
     }
+
+
+# ---------------------------------------------------------------- player search
+
+PLAYER_DAILY = int(os.environ.get("API_FOOTBALL_PLAYER_LIMIT", "25"))  # requests a day that player search may use
+_player_calls = {"day": None, "n": 0}
+_search_cache = {}    # normalised query -> (fetched_at, [players])
+_profile_cache = {}   # player id -> (fetched_at, profile)
+
+
+def _player_budget():
+    """Player pages must never eat the allowance that live scores and line-ups need."""
+    today = datetime.now(timezone.utc).date()
+    if _player_calls["day"] != today:
+        _player_calls.update(day=today, n=0)
+    if _player_calls["n"] >= PLAYER_DAILY:
+        return False
+    _player_calls["n"] += 1
+    return True
+
+
+def _player(p):
+    p = p or {}
+    return {"id": p.get("id"), "name": p.get("name") or "", "firstname": p.get("firstname"), "lastname": p.get("lastname"),
+            "age": p.get("age"), "nationality": p.get("nationality"), "position": p.get("position"),
+            "height": p.get("height"), "weight": p.get("weight"), "photo": p.get("photo"),
+            "birth": (p.get("birth") or {}).get("date"), "birthplace": (p.get("birth") or {}).get("place")}
+
+
+def search_players(q, key):
+    """Players whose name matches q (3+ letters). Returns (list, error) where error is None or a short reason."""
+    q = " ".join((q or "").split())[:40]
+    norm = _norm(q)
+    if len(re.sub(r"[^a-z]", "", norm)) < 3:
+        return [], "short"
+    hit = _search_cache.get(norm)
+    if hit and time.time() - hit[0] < 86400:
+        return hit[1], None
+    if not _player_budget():
+        return [], "busy"
+    data = _get("/players/profiles", key, search=re.sub(r"[^a-z ]", "", norm).strip())
+    if data is None:
+        return [], "unavailable"
+    players = [_player((r or {}).get("player")) for r in (data.get("response") or [])]
+    players = [p for p in players if p["id"] and p["name"]][:20]
+    if len(_search_cache) > 500:
+        _search_cache.clear()
+    _search_cache[norm] = (time.time(), players)
+    return players, None
+
+
+def player_profile(pid, key):
+    """One player's details plus the clubs and national teams they've been listed with, or (None, reason)."""
+    hit = _profile_cache.get(pid)
+    if hit and time.time() - hit[0] < 7 * 86400:
+        return hit[1], None
+    if not _player_budget():
+        return None, "busy"
+    data = _get("/players/profiles", key, player=pid)
+    rows = (data or {}).get("response") or []
+    if not rows:
+        return None, "unavailable" if data is None else "missing"
+    profile = _player(rows[0].get("player"))
+    profile["teams"] = []
+    if _player_budget():  # best effort: the profile is still useful without the club list
+        teams = _get("/players/teams", key, player=pid)
+        found = []
+        for r in (teams or {}).get("response") or []:
+            t, seasons = (r or {}).get("team") or {}, [s for s in (r or {}).get("seasons") or [] if isinstance(s, int)]
+            if t.get("name") and seasons:
+                found.append({"name": t["name"], "logo": t.get("logo"), "last": max(seasons), "first": min(seasons)})
+        profile["teams"] = sorted(found, key=lambda t: (-t["last"], t["name"]))[:8]
+    if len(_profile_cache) > 500:
+        _profile_cache.clear()
+    _profile_cache[pid] = (time.time(), profile)
+    return profile, None

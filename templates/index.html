@@ -77,6 +77,10 @@
 
     // Kickoff times in the viewer's local time.
     function localiseTimes() {
+      document.querySelectorAll(".kday").forEach(function (el) {
+        var d = new Date(el.dataset.utc);
+        if (!isNaN(d)) el.textContent = d.toLocaleDateString([], {weekday: "short", day: "numeric", month: "short"});
+      });
       document.querySelectorAll(".kick").forEach(function (el) {
         var d = new Date(el.dataset.utc);
         if (!isNaN(d)) el.textContent = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
@@ -116,6 +120,11 @@
       document.querySelector(".live-btn").classList.toggle("has", n > 0);
     }
 
+    // "My teams" shows the next two weeks for your teams; otherwise the page's own day.
+    function feedUrl() {
+      if (!favOnly) return "/partial/matches" + window.location.search;
+      return "/partial/myteams?teams=" + encodeURIComponent(myTeams().join(",")) + "&ids=" + encodeURIComponent(favs.join(","));
+    }
     var timer = null;
     function schedule() {
       clearTimeout(timer);
@@ -124,7 +133,7 @@
     }
     function refresh() {
       if (document.hidden) { schedule(); return; }  // nobody is looking: save their data and battery
-      fetch("/partial/matches" + window.location.search)
+      fetch(feedUrl())
         .then(function (r) { return r.ok ? r.text() : Promise.reject(); })
         .then(function (html) {
           document.getElementById("matches").innerHTML = html;
@@ -146,10 +155,13 @@
       favOnly = !favOnly;
       favBtn.classList.toggle("on", favOnly);
       favBtn.setAttribute("aria-pressed", favOnly ? "true" : "false");
-      applyFilters();
+      var label = document.querySelector(".dlabel");
+      if (label && !label.dataset.day) label.dataset.day = label.textContent;
+      if (label) label.textContent = favOnly ? "My teams" : label.dataset.day;
+      clearTimeout(timer); refresh();
     });
     search.addEventListener("input", applyFilters);
-    window.addEventListener("teams-changed", applyFilters);
+    window.addEventListener("teams-changed", function () { if (favOnly) { clearTimeout(timer); refresh(); } else applyFilters(); });
 
     // Calendar button opens the date picker, then loads that day.
     var calBtn = document.getElementById("calBtn");

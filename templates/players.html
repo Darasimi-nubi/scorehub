@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Find a player – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="Search football players on ScoreHub: photo, age, nationality, position and the clubs they have played for.">{% endblock %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Find a player</h1>
+  {% if not enabled %}
+  <p class="empty">Player search isn't available right now.</p>
+  {% else %}
+  <p class="muted">Type at least three letters of a footballer's name.</p>
+  <label class="search wide">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="pq" type="search" placeholder="e.g. Osimhen, Salah, Haaland" autocomplete="off" aria-label="Search players" autofocus>
+  </label>
+  <p class="muted" id="pmsg" hidden></p>
+  <ul class="team-list player-list" id="plist"></ul>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+{% if enabled %}
+<script>
+(function () {
+  var q = document.getElementById("pq"), list = document.getElementById("plist"), msg = document.getElementById("pmsg");
+  var t = null, seq = 0;
+  var TEXT = {short: "", busy: "Player search has reached its limit for today. Please try again tomorrow.",
+              unavailable: "Couldn't reach the player data right now. Try again in a moment.",
+              slow: "You're searching too fast. Wait a few seconds.", off: "Player search isn't available right now."};
+  function say(text) { msg.textContent = text || ""; msg.hidden = !text; }
+  function run() {
+    var v = q.value.trim(), n = ++seq;
+    list.innerHTML = "";
+    if (v.replace(/[^a-z]/gi, "").length < 3) { say(""); return; }
+    say("Searching…");
+    fetch("/api/players?q=" + encodeURIComponent(v)).then(function (r) { return r.json(); }).then(function (d) {
+      if (n !== seq) return;
+      if (d.error) { say(TEXT[d.error] || ""); return; }
+      say(d.players.length ? "" : "No player found. Try the surname only.");
+      d.players.forEach(function (p) {
+        var li = document.createElement("li"), a = document.createElement("a");
+        a.href = "/player/" + p.id; a.className = "plink";
+        if (p.photo) { var img = document.createElement("img"); img.src = p.photo; img.alt = ""; img.loading = "lazy"; a.appendChild(img); }
+        var s = document.createElement("span");
+        s.textContent = p.name;
+        var small = document.createElement("small");
+        small.textContent = [p.position, p.nationality, p.age ? p.age + " yrs" : ""].filter(Boolean).join(" · ");
+        s.appendChild(small); a.appendChild(s); li.appendChild(a); list.appendChild(li);
+      });
+    }).catch(function () { if (n === seq) say(TEXT.unavailable); });
+  }
+  q.addEventListener("input", function () { clearTimeout(t); t = setTimeout(run, 500); });
+})();
+</script>
+{% endif %}
+{% endblock %}
