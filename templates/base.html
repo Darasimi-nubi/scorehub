@@ -53,11 +53,12 @@
   {% block body %}{% endblock %}
   <footer class="site-footer">
     <div class="wrap">
-      <nav><a href="{{ url_for('about_page') }}">About</a><a href="{{ url_for('privacy_page') }}">Privacy</a><a href="{{ url_for('terms_page') }}">Terms</a><a href="{{ url_for('contact_page') }}">Contact</a></nav>
+      <nav><a href="{{ url_for('guides_page') }}">Guides</a><a href="{{ url_for('about_page') }}">About</a><a href="{{ url_for('privacy_page') }}">Privacy</a><a href="{{ url_for('terms_page') }}">Terms</a><a href="{{ url_for('contact_page') }}">Contact</a></nav>
       <p>&copy; ScoreHub. Live scores, results and tables for football, basketball, hockey, tennis and cricket.</p>
     </div>
   </footer>
   <script src="{{ url_for('static', filename='follow.js') }}"></script>
+  <script src="{{ url_for('static', filename='sounds.js') }}"></script>
   <script src="{{ url_for('static', filename='push.js') }}"></script>
   <script src="{{ url_for('static', filename='install.js') }}" defer></script>
   {% block scripts %}{% endblock %}

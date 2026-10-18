@@ -99,12 +99,28 @@ def _score(row):
     return int(row.get("home_score") or 0), int(row.get("away_score") or 0)
 
 
-def goal_payload(row, side):
+SCORER_LOOKUP = None  # set by the app: function(row, side) -> {"player", "minute", "kind", "assist"} or None
+
+
+def _scorer_text(sc):
+    if not sc or not sc.get("player"):
+        return ""
+    text = f"Own goal by {sc['player']}" if sc.get("kind") == "og" else sc["player"]
+    if sc.get("minute"):
+        text += f" {sc['minute']}"
+    if sc.get("kind") == "pen":
+        text += " (pen)"
+    if sc.get("assist") and sc.get("kind") != "og":
+        text += f" · assist: {sc['assist']}"
+    return text
+
+
+def goal_payload(row, side, scorer=None):
     hs, as_ = _score(row)
     team = row["home"] if side == "home" else row["away"]
     minute = f" · {row['clock']}" if row.get("clock") else ""
     return {"title": f"⚽ GOAL! {row['home']} {hs}–{as_} {row['away']}",
-            "body": f"{team} scored{minute}", "url": _url(row), "tag": f"goal-{row['id']}"}
+            "body": _scorer_text(scorer) or f"{team} scored{minute}", "url": _url(row), "tag": f"goal-{row['id']}"}
 
 
 def _url(row):
@@ -148,9 +164,9 @@ def detect_events(state, reminded, rows, now=None):
     return events
 
 
-def event_payload(row, kind, side=None, now=None):
+def event_payload(row, kind, side=None, now=None, scorer=None):
     if kind == "goal":
-        return goal_payload(row, side)
+        return goal_payload(row, side, scorer)
     hs, as_ = _score(row)
     if kind == "kickoff":
         return {"title": f"🟢 Kick-off: {row['home']} v {row['away']}", "body": row.get("league", ""),
@@ -164,12 +180,35 @@ def event_payload(row, kind, side=None, now=None):
             "url": _url(row), "tag": f"soon-{row['id']}"}
 
 
+def _deliver(row, kind, side, sender, subs=None):
+    """Send one event to everyone who follows it. For goals, first try to find out who scored."""
+    subs = subs if subs is not None else subscribers_for(row)
+    if not subs:
+        return
+    scorer = None
+    if kind == "goal" and SCORER_LOOKUP:
+        for attempt in range(2):
+            try:
+                scorer = SCORER_LOOKUP(row, side)
+            except Exception as exc:
+                print(f"push: scorer lookup failed: {exc}")
+            if scorer:
+                break
+            if attempt == 0:
+                time.sleep(10)  # the data provider is often a few seconds behind
+    payload = event_payload(row, kind, side, scorer=scorer)
+    for sub in subs:
+        if not sender(sub, payload):
+            remove(sub["endpoint"])
+
+
 def notify_events(events, sender=send):
     for row, kind, side in events:
-        payload = event_payload(row, kind, side)
-        for sub in subscribers_for(row):
-            if not sender(sub, payload):
-                remove(sub["endpoint"])
+        subs = subscribers_for(row)  # nobody follows it: no scorer lookup, no API request spent
+        if kind == "goal" and SCORER_LOOKUP and subs:
+            threading.Thread(target=_deliver, args=(row, kind, side, sender, subs), daemon=True).start()
+        else:
+            _deliver(row, kind, side, sender, subs)
 
 
 def run(get_rows, interval=CHECK_EVERY, sender=send):

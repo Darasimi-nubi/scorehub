@@ -28,6 +28,7 @@ SITE_URL = (os.environ.get("SITE_URL") or "https://scorehubber.name.ng").rstrip(
 
 import card  # share-preview pictures
 import matchlinks  # permanent match ids and readable links
+import content  # written league guides and explainers
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 import highlights  # match highlight videos (YOUTUBE_API_KEY)
 
@@ -707,6 +708,45 @@ def player_page(pid):
     return render_template("player.html", p=profile, error=error), (200 if profile else 503)
 
 
+# Pages with little text stay reachable but are not listed, linked or put in the sitemap: thin pages hurt more than they help.
+MIN_GUIDE_WORDS = 100
+LEAGUES_LISTED = {k: g for k, g in content.LEAGUES.items() if len(" ".join(g["body"]).split()) >= MIN_GUIDE_WORDS}
+LEAGUE_GUIDE = {name: slug for slug, g in LEAGUES_LISTED.items() for name in g["names"]}
+app.jinja_env.globals["league_guide"] = lambda name: LEAGUE_GUIDE.get(name)
+
+
+def _paragraphs(blocks):
+    return [("h" if b.startswith("## ") else "p", b[3:] if b.startswith("## ") else b) for b in blocks]
+
+
+@app.route("/guides")
+def guides_page():
+    return render_template("guides.html", leagues=LEAGUES_LISTED, articles=content.ARTICLES)
+
+
+@app.route("/guides/<slug>")
+def article_page(slug):
+    a = content.ARTICLES.get(slug)
+    if not a:
+        abort(404)
+    others = [(k, v["title"]) for k, v in content.ARTICLES.items() if k != slug][:4]
+    return render_template("article.html", a=a, blocks=_paragraphs(a["body"]), slug=slug, others=others)
+
+
+@app.route("/league/<slug>")
+def league_page(slug):
+    g = content.LEAGUES.get(slug)
+    if not g:
+        abort(404)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    marks = ",".join("?" * len(g["names"]))
+    rows = get_db().execute(MATCH_SQL + f" WHERE l.name IN ({marks}) AND m.kickoff >= ? AND m.kickoff <= ? ORDER BY m.kickoff LIMIT 10",
+                            (*g["names"], (now - timedelta(hours=3)).isoformat(), (now + timedelta(days=7)).isoformat())).fetchall()
+    upcoming = decorate(rows)
+    table = next((code_for(n) for n in g["names"] if code_for(n)), None)
+    return render_template("league_guide.html", g=g, slug=slug, upcoming=upcoming, table=table, blocks=g["body"], listed=slug in LEAGUES_LISTED)
+
+
 @app.route("/following")
 def following_page():
     return render_template("following.html")
@@ -787,6 +827,7 @@ def sitemap_xml():
         "SELECT slug, kickoff FROM matches WHERE slug IS NOT NULL AND kickoff BETWEEN ? AND ? ORDER BY kickoff DESC LIMIT 1000",
         ((now - timedelta(days=3)).isoformat(), (now + timedelta(days=3)).isoformat())).fetchall()
     paths += [f"/match/{r['slug']}" for r in rows]
+    paths += ["/guides"] + [f"/guides/{k}" for k in content.ARTICLES] + [f"/league/{k}" for k in LEAGUES_LISTED]
     body = "".join(f"<url><loc>{SITE_URL}{p.replace('&', '&amp;')}</loc></url>" for p in paths)
     return Response('<?xml version="1.0" encoding="UTF-8"?>'
                     f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',
@@ -846,6 +887,10 @@ def start_push():
         print("push: VAPID keys not set, notifications are off")
         return
     import threading
+    if API_FOOTBALL_KEY:
+        import apifootball
+        push.SCORER_LOOKUP = lambda row, side: apifootball.latest_goal(
+            row, API_FOOTBALL_KEY, side, int(row.get("home_score" if side == "home" else "away_score") or 0))
     threading.Thread(target=push.run, args=(_rows_for_push,), daemon=True).start()
 
 

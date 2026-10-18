@@ -13,6 +13,17 @@
     <button type="button" id="ctaBtn">Turn on alerts</button>
   </div>
 
+  <div class="soundbox" id="soundbox" hidden>
+    <h2>Alert sound</h2>
+    <div class="soundrow">
+      <select id="soundSel" aria-label="Alert sound"></select>
+      <button type="button" id="soundTest">&#9654; Preview</button>
+    </div>
+    <p class="muted small">This sound plays when ScoreHub is open on screen. When the site is closed, your phone or browser plays
+    its own notification sound, and websites cannot change that. On Android you can change it: press and hold a ScoreHub notification,
+    open its settings and pick a sound. Tap anywhere on the page first so your browser allows sound.</p>
+  </div>
+
   <h2>Following</h2>
   <ul class="team-list" id="mine"></ul>
   <p class="empty" id="none">You aren't following any team yet. Search for one below, or pick from the list.</p>
@@ -66,6 +77,22 @@
   tq.addEventListener("input", function () { clearTimeout(t); t = setTimeout(function () { search(tq.value.trim()); }, 250); });
 
   drawMine(); search("");
+
+  // Alert sound picker
+  var S = window.ScoreHubSound;
+  if (S && (window.AudioContext || window.webkitAudioContext)) {
+    var sel = document.getElementById("soundSel");
+    Object.keys(S.labels).forEach(function (k) {
+      var o = document.createElement("option"); o.value = k; o.textContent = S.labels[k]; sel.appendChild(o);
+    });
+    sel.value = S.get();
+    sel.addEventListener("change", function () { S.set(sel.value); S.play(sel.value); });
+    document.getElementById("soundTest").addEventListener("click", function () {
+      if (sel.value === "default" || sel.value === "off") { alert("That option has no sound to preview. Pick Ping, Chime, Whistle or Horn to hear it."); return; }
+      if (!S.play(sel.value)) alert("Your browser blocked the sound. Tap the page once and try again.");
+    });
+    document.getElementById("soundbox").hidden = false;
+  }
 
   // Alerts call-to-action, shown once at least one team is followed
   var bell = document.getElementById("bellBtn"), cta = document.getElementById("cta");

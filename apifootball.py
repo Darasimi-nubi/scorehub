@@ -661,3 +661,40 @@ def player_profile(pid, key):
         _profile_cache.clear()
     _profile_cache[pid] = (time.time(), profile)
     return profile, None
+
+
+# ---------------------------------------------------------------- who scored (for notifications)
+
+def latest_goal(m, key, side, nth):
+    """The scorer of a team's nth goal in a match: {"player", "minute", "kind", "assist"}, or None if not available yet.
+
+    One request (plus one more the first time the match has to be found). Goals the provider hasn't recorded yet give None,
+    so the caller can try again a few seconds later. An own goal counts for the team that benefits.
+    """
+    if budget_used_up() or nth < 1:
+        return None
+    fx = _find_fixture(m, key)
+    if not fx:
+        return None
+    home_id = fx["teams"]["home"]["id"]
+    data = _get("/fixtures/events", key, fixture=fx["fixture"]["id"])
+    found = []
+    for e in (data or {}).get("response") or []:
+        if e.get("type") != "Goal" or e.get("detail") == "Missed Penalty":
+            continue
+        own = e.get("detail") == "Own Goal"
+        by_home = ((e.get("team") or {}).get("id") == home_id) != own
+        if by_home != (side == "home"):
+            continue
+        t = e.get("time") or {}
+        found.append(((t.get("elapsed") or 0) * 100 + (t.get("extra") or 0), e, t))
+    found.sort(key=lambda x: x[0])
+    if len(found) < nth:
+        return None
+    _order, e, t = found[nth - 1]
+    minute = ""
+    if t.get("elapsed") is not None:
+        minute = f"{t['elapsed']}+{t['extra']}'" if t.get("extra") else f"{t['elapsed']}'"
+    return {"player": (e.get("player") or {}).get("name") or "", "minute": minute,
+            "kind": {"Penalty": "pen", "Own Goal": "og"}.get(e.get("detail"), ""),
+            "assist": (e.get("assist") or {}).get("name") or ""}
