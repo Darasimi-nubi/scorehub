@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ g.title }} – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="{{ g.intro }}">
+  {% if not listed %}<meta name="robots" content="noindex">{% endif %}
+  <link rel="canonical" href="{{ site_url }}{{ url_for('league_page', slug=slug) }}">
+  <meta property="og:title" content="{{ g.title }}"><meta property="og:description" content="{{ g.intro }}"><meta property="og:type" content="article">{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('guides_page') }}">&lsaquo; Guides</a>
+  <h1>{{ g.title }}</h1>
+  <p class="lead">{{ g.intro }}</p>
+  {% for text in blocks %}<p>{{ text }}</p>{% endfor %}
+  <p>
+    <a class="share-btn" href="{{ url_for('index', sport='football', league=g.names[0]) }}">Scores &amp; fixtures</a>
+    {% if table %}<a class="share-btn" href="{{ url_for('table_page', code=table) }}">League table</a>{% endif %}
+  </p>
+  {% if upcoming %}
+  <h2>Coming up</h2>
+  <ul class="glist">
+    {% for m in upcoming %}<li><a href="{{ match_url(m) }}"><b>{{ m.home }} v {{ m.away }}</b>
+      <span><span class="kday" data-utc="{{ m.kickoff }}">{{ m.kickoff[:10] }}</span>
+      {% if m.status == 'live' %} · live{% elif m.status == 'finished' %} · {{ m.home_score }}–{{ m.away_score }}{% endif %}</span></a></li>{% endfor %}
+  </ul>
+  <script>document.querySelectorAll(".kday").forEach(function(el){var d=new Date(el.dataset.utc);if(!isNaN(d))el.textContent=d.toLocaleString([], {weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});});</script>
+  {% endif %}
+</main>
+{% endblock %}

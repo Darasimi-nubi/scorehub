@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Football guides – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="Guides to the world's football leagues and cups, and plain-English explainers on tables, offside, formations and more.">
+  <link rel="canonical" href="{{ site_url }}/guides">{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Football guides</h1>
+  <p>Plain-English guides to the competitions we cover, and explainers for the terms you see on the scores pages.</p>
+  <h2>Explainers</h2>
+  <ul class="glist">
+    {% for k, a in articles.items() %}<li><a href="{{ url_for('article_page', slug=k) }}"><b>{{ a.title }}</b><span>{{ a.desc }}</span></a></li>{% endfor %}
+  </ul>
+  <h2>Competition guides</h2>
+  <ul class="glist">
+    {% for k, g in leagues.items() %}<li><a href="{{ url_for('league_page', slug=k) }}"><b>{{ g.title }}</b><span>{{ g.country }}</span></a></li>{% endfor %}
+  </ul>
+</main>
+{% endblock %}

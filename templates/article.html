@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ a.title }} – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="{{ a.desc }}">
+  <link rel="canonical" href="{{ site_url }}{{ url_for('article_page', slug=slug) }}">
+  <meta property="og:title" content="{{ a.title }}"><meta property="og:description" content="{{ a.desc }}"><meta property="og:type" content="article">{% endblock %}
+{% block body %}
+<main class="wrap narrow doc">
+  <a class="page-back" href="{{ url_for('guides_page') }}">&lsaquo; Guides</a>
+  <h1>{{ a.title }}</h1>
+  {% for kind, text in blocks %}{% if kind == 'h' %}<h2>{{ text }}</h2>{% else %}<p>{{ text }}</p>{% endif %}{% endfor %}
+  <h2>More guides</h2>
+  <ul class="glist">{% for k, t in others %}<li><a href="{{ url_for('article_page', slug=k) }}"><b>{{ t }}</b></a></li>{% endfor %}</ul>
+</main>
+{% endblock %}

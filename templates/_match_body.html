@@ -5,6 +5,7 @@
 {% endmacro %}
 <div class="scoreboard {{ m.status }}">
   <div class="league-line">{{ m.league }}{% if m.country %} <span class="country">{{ m.country }}</span>{% endif %}
+    {% if league_guide(m.league) %}<a class="tbl" href="{{ url_for('league_page', slug=league_guide(m.league)) }}">Guide</a>{% endif %}
     {% if table_code(m.league) %}<a class="tbl" href="{{ url_for('table_page', code=table_code(m.league)) }}">Table →</a>{% endif %}</div>
   <div class="board">
     <div class="side">
