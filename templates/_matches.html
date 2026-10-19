@@ -34,4 +34,4 @@
 {% else %}
 <p class="empty">{{ empty_text or "No matches for this selection." }}</p>
 {% endfor %}
-<span id="liveData" data-n="{{ live_count }}" hidden></span>
+{% if live_count is not none and live_count is defined %}<span id="liveData" data-n="{{ live_count }}" hidden></span>{% endif %}

@@ -24,6 +24,8 @@
     open its settings and pick a sound. Tap anywhere on the page first so your browser allows sound.</p>
   </div>
 
+  <label class="digest"><input type="checkbox" id="digest"> <span>Morning summary: one notification at 8 am on days your teams play</span></label>
+
   <h2>Following</h2>
   <ul class="team-list" id="mine"></ul>
   <p class="empty" id="none">You aren't following any team yet. Search for one below, or pick from the list.</p>
@@ -48,7 +50,7 @@
     var li = document.createElement("li");
     var img = document.createElement("img");
     if (team.crest) { img.src = team.crest; img.alt = ""; img.loading = "lazy"; li.appendChild(img); }
-    var name = document.createElement("span"); name.textContent = team.name; li.appendChild(name);
+    var name = document.createElement("a"); name.href = "/team/" + key; name.className = "tname"; name.textContent = team.name; li.appendChild(name);
     var b = document.createElement("button");
     b.type = "button"; b.className = "follow-btn"; b.dataset.key = key; b.dataset.name = team.name; b.setAttribute("aria-pressed", "false");
     b.innerHTML = '<span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span>';
@@ -93,6 +95,14 @@
     });
     document.getElementById("soundbox").hidden = false;
   }
+
+  // Morning summary on/off (sent to the server with the subscription)
+  var dg = document.getElementById("digest");
+  try { dg.checked = localStorage.getItem("scorehub:digest") !== "0"; } catch (e) { dg.checked = true; }
+  dg.addEventListener("change", function () {
+    try { localStorage.setItem("scorehub:digest", dg.checked ? "1" : "0"); } catch (e) {}
+    window.dispatchEvent(new Event("favs-changed"));
+  });
 
   // Alerts call-to-action, shown once at least one team is followed
   var bell = document.getElementById("bellBtn"), cta = document.getElementById("cta");

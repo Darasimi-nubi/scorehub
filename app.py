@@ -1,5 +1,6 @@
 import gzip
 import os
+import re
 import sqlite3
 import time
 from collections import OrderedDict
@@ -29,6 +30,7 @@ SITE_URL = (os.environ.get("SITE_URL") or "https://scorehubber.name.ng").rstrip(
 import card  # share-preview pictures
 import matchlinks  # permanent match ids and readable links
 import content  # written league guides and explainers
+import predict  # match predictions and the leaderboard
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 import highlights  # match highlight videos (YOUTUBE_API_KEY)
 
@@ -662,21 +664,25 @@ def partial_highlights(match_id):
 
 # ---- Pages that ad networks and visitors expect, plus crawler files ----
 
-# Player search spends the shared API-Football allowance, so each visitor gets only a few searches a minute.
-_player_hits = {}
+# Per-visitor limits: player search spends the shared API-Football allowance, and votes/nicknames can be spammed.
+_hits = {}
+
+
+def _rate_ok(bucket, limit, window=60):
+    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
+    key, now = (bucket, ip), time.time()
+    recent = [t for t in _hits.get(key, []) if now - t < window]
+    if len(recent) >= limit:
+        _hits[key] = recent
+        return False
+    _hits[key] = recent + [now]
+    if len(_hits) > 4000:
+        _hits.clear()
+    return True
 
 
 def _player_rate_ok():
-    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
-    now = time.time()
-    recent = [t for t in _player_hits.get(ip, []) if now - t < 60]
-    if len(recent) >= 12:
-        _player_hits[ip] = recent
-        return False
-    _player_hits[ip] = recent + [now]
-    if len(_player_hits) > 2000:
-        _player_hits.clear()
-    return True
+    return _rate_ok("player", 12)
 
 
 @app.route("/players")
@@ -745,6 +751,99 @@ def league_page(slug):
     upcoming = decorate(rows)
     table = next((code_for(n) for n in g["names"] if code_for(n)), None)
     return render_template("league_guide.html", g=g, slug=slug, upcoming=upcoming, table=table, blocks=g["body"], listed=slug in LEAGUES_LISTED)
+
+
+INDEX_TEAM_PAGES = os.environ.get("INDEX_TEAM_PAGES") == "1"  # team pages are mostly fixtures, so keep them out of Google until there is more text
+
+
+def _team_rows(key):
+    """Every team record that counts as this team (providers spell names differently: "Arsenal" and "Arsenal FC")."""
+    return [r for r in get_db().execute("SELECT id, name, crest FROM teams").fetchall() if matchlinks.team_key(r["name"]) == key]
+
+
+@app.route("/team/<key>")
+def team_page(key):
+    if not re.fullmatch(r"[a-z0-9-]{1,60}", key):
+        abort(404)
+    hits = _team_rows(key)
+    if not hits:
+        abort(404)
+    ids = [h["id"] for h in hits]
+    marks = ",".join("?" * len(ids))
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    db = get_db()
+    where = f" WHERE (m.home_id IN ({marks}) OR m.away_id IN ({marks}))"
+    upcoming = decorate(db.execute(MATCH_SQL + where + " AND m.kickoff >= ? ORDER BY m.kickoff LIMIT 6",
+                                   (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
+    past = decorate(db.execute(MATCH_SQL + where + " AND m.kickoff < ? ORDER BY m.kickoff DESC LIMIT 10",
+                               (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
+    results = [m for m in past if m["status"] == "finished"][:8]
+    best = next((h for h in hits if h["crest"]), hits[0])
+    name = min((h["name"] for h in hits), key=len) if len(hits) > 1 else hits[0]["name"]
+    leagues = sorted({m["league"] for m in upcoming + results})
+    sport = (upcoming + results)[0]["sport"] if upcoming + results else "football"
+    return render_template("team.html", key=key, name=name, crest=best["crest"], upcoming=upcoming, results=results,
+                           leagues=leagues, sport=sport, has_matches=bool(upcoming or results), indexable=INDEX_TEAM_PAGES)
+
+
+_last_settle = [0.0]
+
+
+def _settle_recent():
+    """Score predictions for matches that have finished (at most once a minute; the push loop also does this)."""
+    if time.time() - _last_settle[0] < 60:
+        return
+    _last_settle[0] = time.time()
+    since = (datetime.now(timezone.utc) - timedelta(days=6)).isoformat()
+    rows = get_db().execute(MATCH_SQL + " WHERE l.sport = 'football' AND m.status = 'finished' AND m.kickoff >= ?", (since,)).fetchall()
+    predict.settle([dict(r) for r in rows])
+
+
+def _predict_state(m, uid):
+    t = predict.tally(m["id"], uid)
+    return {"counts": {"H": t["H"], "D": t["D"], "A": t["A"]}, "total": t["total"], "mine": t["mine"],
+            "open": predict.can_vote(m), "status": m["status"], "kickoff": m["kickoff"], "outcome": predict.outcome_of(m),
+            "home": m["home"], "away": m["away"]}
+
+
+@app.route("/api/predict/<int:match_id>", methods=["GET", "POST"])
+def api_predict(match_id):
+    m = get_match(match_id)
+    if m is None or m["sport"] != "football":
+        abort(404)
+    if request.method == "GET":
+        return jsonify(_predict_state(m, request.args.get("uid", "")))
+    if not _rate_ok("vote", 30):
+        return jsonify(error="slow"), 429
+    body = request.get_json(silent=True) or {}
+    ok, reason = predict.vote(match_id, body.get("uid"), body.get("pick"), m)
+    if not ok:
+        return jsonify(error=reason), 400
+    return jsonify(_predict_state(m, body.get("uid")))
+
+
+@app.route("/api/predict/nick", methods=["POST"])
+def api_predict_nick():
+    if not _rate_ok("nick", 10):
+        return jsonify(error="slow"), 429
+    body = request.get_json(silent=True) or {}
+    ok, reason = predict.set_nick(body.get("uid"), body.get("nick"))
+    if not ok:
+        return jsonify(error=reason), 400
+    return jsonify(ok=True, nick=predict.get_nick(body.get("uid")))
+
+
+@app.route("/api/predict/me")
+def api_predict_me():
+    uid = request.args.get("uid", "")
+    _settle_recent()
+    return jsonify(nick=predict.get_nick(uid), stats=predict.my_stats(uid))
+
+
+@app.route("/predictions")
+def predictions_page():
+    _settle_recent()
+    return render_template("predictions.html", week=predict.leaderboard(days=7), alltime=predict.leaderboard(), points=predict.POINTS)
 
 
 @app.route("/following")
@@ -818,6 +917,13 @@ def robots_txt():
                     mimetype="text/plain")
 
 
+def _sitemap_teams(now):
+    rows = get_db().execute("""SELECT DISTINCT t.name FROM matches m JOIN teams t ON t.id IN (m.home_id, m.away_id)
+                               WHERE m.kickoff BETWEEN ? AND ? LIMIT 600""",
+                            ((now - timedelta(days=7)).isoformat(), (now + timedelta(days=7)).isoformat())).fetchall()
+    return sorted({matchlinks.team_key(r["name"]) for r in rows})
+
+
 @app.route("/sitemap.xml")
 def sitemap_xml():
     paths = ["/", "/?sport=football", "/?sport=basketball", "/?sport=hockey", "/?sport=tennis", "/?sport=cricket",
@@ -827,6 +933,7 @@ def sitemap_xml():
         "SELECT slug, kickoff FROM matches WHERE slug IS NOT NULL AND kickoff BETWEEN ? AND ? ORDER BY kickoff DESC LIMIT 1000",
         ((now - timedelta(days=3)).isoformat(), (now + timedelta(days=3)).isoformat())).fetchall()
     paths += [f"/match/{r['slug']}" for r in rows]
+    paths += [f"/team/{k}" for k in _sitemap_teams(now)]
     paths += ["/guides"] + [f"/guides/{k}" for k in content.ARTICLES] + [f"/league/{k}" for k in LEAGUES_LISTED]
     body = "".join(f"<url><loc>{SITE_URL}{p.replace('&', '&amp;')}</loc></url>" for p in paths)
     return Response('<?xml version="1.0" encoding="UTF-8"?>'
@@ -860,7 +967,9 @@ def push_subscribe():
         abort(400)
     matches = body.get("matches") if isinstance(body.get("matches"), list) else []
     teams = body.get("teams") if isinstance(body.get("teams"), list) else []
-    push.save({"endpoint": sub["endpoint"], "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}, matches, teams)
+    tz = body.get("tz") if isinstance(body.get("tz"), int) and not isinstance(body.get("tz"), bool) else None
+    push.save({"endpoint": sub["endpoint"], "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}, matches, teams,
+              tz=tz, digest=body.get("digest") is not False)
     return jsonify(ok=True)
 
 
@@ -878,7 +987,21 @@ def _rows_for_push():
     sql = MATCH_SQL + " WHERE l.sport = 'football' AND m.kickoff >= ? AND m.kickoff <= ?"
     params = [(now - timedelta(hours=4)).isoformat(), (now + timedelta(minutes=push.REMIND_MINUTES + 1)).isoformat()]
     with app.app_context():
-        return decorate(get_db().execute(sql, params).fetchall())
+        rows = decorate(get_db().execute(sql, params).fetchall())
+    try:
+        predict.settle(rows)  # prediction points are handed out as soon as a match ends
+    except Exception as exc:
+        print(f"predict: settle failed: {exc}")
+    return rows
+
+
+def _rows_for_digest():
+    """Football matches that haven't finished, from half a day ago to a day and a half ahead (covers every time zone)."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    with app.app_context():
+        rows = get_db().execute(MATCH_SQL + " WHERE l.sport = 'football' AND m.status IN ('scheduled', 'live') AND m.kickoff >= ? AND m.kickoff <= ?",
+                                ((now - timedelta(hours=12)).isoformat(), (now + timedelta(hours=40)).isoformat())).fetchall()
+    return [dict(r) for r in rows]
 
 
 def start_push():
@@ -887,6 +1010,7 @@ def start_push():
         print("push: VAPID keys not set, notifications are off")
         return
     import threading
+    push.DIGEST_ROWS = _rows_for_digest
     if API_FOOTBALL_KEY:
         import apifootball
         push.SCORER_LOOKUP = lambda row, side: apifootball.latest_goal(

@@ -28,6 +28,18 @@
   <div id="match">
     {% include "_match_body.html" %}
   </div>
+  {% if m.sport == 'football' and m.status != 'postponed' %}
+  <section class="predict" id="predict" data-id="{{ m.id }}" hidden>
+    <h2 class="p-title">Who will win?</h2>
+    <div class="p-row">
+      <button type="button" class="p-btn" data-pick="H"><i class="p-bar"></i><span class="p-lbl">{{ m.home }}</span><span class="p-pct"></span></button>
+      <button type="button" class="p-btn" data-pick="D"><i class="p-bar"></i><span class="p-lbl">Draw</span><span class="p-pct"></span></button>
+      <button type="button" class="p-btn" data-pick="A"><i class="p-bar"></i><span class="p-lbl">{{ m.away }}</span><span class="p-pct"></span></button>
+    </div>
+    <p class="muted small p-msg"></p>
+    <a class="small" href="{{ url_for('predictions_page') }}">Leaderboard &rsaquo;</a>
+  </section>
+  {% endif %}
 </main>
 {% endblock %}
 

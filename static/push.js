@@ -25,7 +25,11 @@
   function register() { return navigator.serviceWorker.register("/sw.js"); }
   function currentSub() { return register().then(function () { return navigator.serviceWorker.ready; }).then(function (r) { return r.pushManager.getSubscription(); }); }
   function teams() { return window.ScoreHubTeams ? window.ScoreHubTeams.list() : []; }
-  function sync(sub) { return post("/api/push/subscribe", {subscription: sub.toJSON(), matches: favs(), teams: teams()}); }
+  function digestOn() { try { return localStorage.getItem("scorehub:digest") !== "0"; } catch (e) { return true; } }
+  function sync(sub) {
+    return post("/api/push/subscribe", {subscription: sub.toJSON(), matches: favs(), teams: teams(),
+                                        tz: -new Date().getTimezoneOffset(), digest: digestOn()});
+  }
 
   fetch("/api/push/key").then(function (r) { return r.ok ? r.json() : Promise.reject(); }).then(function (cfg) {
     // Notifications are available on this server: show the button.

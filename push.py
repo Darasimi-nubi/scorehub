@@ -13,7 +13,7 @@ import sqlite3
 import threading
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import matchlinks
@@ -39,8 +39,11 @@ def _db():
     con = sqlite3.connect(SUBS_DB, timeout=10)
     con.execute("CREATE TABLE IF NOT EXISTS subs (endpoint TEXT PRIMARY KEY, sub TEXT NOT NULL,"
                 " matches TEXT NOT NULL DEFAULT '[]', updated REAL)")
-    if "teams" not in [r[1] for r in con.execute("PRAGMA table_info(subs)")]:
-        con.execute("ALTER TABLE subs ADD COLUMN teams TEXT NOT NULL DEFAULT '[]'")
+    have = [r[1] for r in con.execute("PRAGMA table_info(subs)")]
+    for col, ddl in (("teams", "TEXT NOT NULL DEFAULT '[]'"), ("tz", "INTEGER NOT NULL DEFAULT 60"),
+                     ("digest", "INTEGER NOT NULL DEFAULT 1"), ("last_digest", "TEXT")):
+        if col not in have:
+            con.execute(f"ALTER TABLE subs ADD COLUMN {col} {ddl}")
     return con
 
 
@@ -53,15 +56,18 @@ def valid_endpoint(url):
     return u.scheme == "https" and any(host == h or host.endswith("." + h) for h in PUSH_HOSTS)
 
 
-def save(sub, matches, teams=()):
-    """Store (or refresh) one browser's subscription, the match ids it starred and the teams it follows."""
+def save(sub, matches, teams=(), tz=None, digest=True):
+    """Store (or refresh) one browser's subscription, the match ids it starred and the teams it follows.
+
+    tz is the browser's UTC offset in minutes (Lagos = 60), used to send the morning summary at a sensible hour."""
+    tz = tz if isinstance(tz, int) and -840 <= tz <= 840 else 60
     ids = sorted({int(x) for x in matches if str(x).isdigit()})[:300]
     keys = sorted({t for t in teams if isinstance(t, str) and re.fullmatch(r"[a-z0-9-]{1,60}", t)})[:100]
     with _lock, _db() as con:
-        con.execute("INSERT INTO subs (endpoint, sub, matches, teams, updated) VALUES (?,?,?,?,?)"
+        con.execute("INSERT INTO subs (endpoint, sub, matches, teams, tz, digest, updated) VALUES (?,?,?,?,?,?,?)"
                     " ON CONFLICT(endpoint) DO UPDATE SET sub=excluded.sub, matches=excluded.matches,"
-                    " teams=excluded.teams, updated=excluded.updated",
-                    (sub["endpoint"], json.dumps(sub), json.dumps(ids), json.dumps(keys), time.time()))
+                    " teams=excluded.teams, tz=excluded.tz, digest=excluded.digest, updated=excluded.updated",
+                    (sub["endpoint"], json.dumps(sub), json.dumps(ids), json.dumps(keys), tz, 1 if digest else 0, time.time()))
 
 
 def remove(endpoint):
@@ -211,12 +217,66 @@ def notify_events(events, sender=send):
             _deliver(row, kind, side, sender, subs)
 
 
+DIGEST_ROWS = None   # set by the app: function() -> football matches not yet finished, from 12 h ago to 40 h ahead
+DIGEST_HOUR = 8      # local time; sent between 8:00 and 11:59, once a day
+
+
+def _digest_payload(mine, tz):
+    def when(r):
+        return (datetime.fromisoformat(r["kickoff"]) + timedelta(minutes=tz)).strftime("%H:%M")
+    if len(mine) == 1:
+        r = mine[0]
+        return {"title": f"⚽ Today: {r['home']} v {r['away']}", "body": f"Kicks off at {when(r)} · {r.get('league', '')}".strip(" ·"),
+                "url": _url(r), "tag": "digest"}
+    lines = [f"{r['home']} v {r['away']} {when(r)}" for r in mine[:3]]
+    if len(mine) > 3:
+        lines.append(f"+{len(mine) - 3} more")
+    return {"title": f"⚽ {len(mine)} matches for your teams today", "body": " · ".join(lines), "url": "/?sport=football", "tag": "digest"}
+
+
+def send_digests(rows, now=None, sender=send):
+    """Once a morning, tell each person which of their teams' (or starred) matches are on today. Silent on days with none."""
+    now = now or datetime.now(timezone.utc)
+    with _lock, _db() as con:
+        subs = con.execute("SELECT endpoint, sub, matches, teams, tz, last_digest FROM subs WHERE digest = 1").fetchall()
+    keyed = [(r, {matchlinks.team_key(r.get("home", "")), matchlinks.team_key(r.get("away", ""))}) for r in rows]
+    sent = 0
+    for endpoint, sub_json, m_json, t_json, tz, last in subs:
+        local = now + timedelta(minutes=tz)
+        today = local.date().isoformat()
+        if last == today or not (DIGEST_HOUR <= local.hour < DIGEST_HOUR + 4):
+            continue
+        with _lock, _db() as con:  # mark first: a person is never sent two summaries in a day, even if a send fails
+            con.execute("UPDATE subs SET last_digest = ? WHERE endpoint = ?", (today, endpoint))
+        ids, teams = set(json.loads(m_json)), set(json.loads(t_json))
+        if not ids and not teams:
+            continue
+        start = datetime(local.year, local.month, local.day, tzinfo=timezone.utc) - timedelta(minutes=tz)
+        end = start + timedelta(days=1)
+        mine = [r for r, keys in keyed if r.get("status") in ("scheduled", "live")
+                and start <= datetime.fromisoformat(r["kickoff"]) < end and (r["id"] in ids or keys & teams)]
+        if not mine:
+            continue
+        mine.sort(key=lambda r: r["kickoff"])
+        if not sender(json.loads(sub_json), _digest_payload(mine, tz)):
+            remove(endpoint)
+        sent += 1
+    return sent
+
+
 def run(get_rows, interval=CHECK_EVERY, sender=send):
     """Background loop: look at today's football matches and push goals, kick-offs, full-times and reminders."""
     state, reminded = {}, set()
+    last_digest_check = 0.0
     while True:
         try:
             notify_events(detect_events(state, reminded, get_rows()), sender)
         except Exception as exc:
             print(f"push: check failed: {exc}")
+        if DIGEST_ROWS and time.time() - last_digest_check >= 60:
+            last_digest_check = time.time()
+            try:
+                send_digests(DIGEST_ROWS(), sender=sender)
+            except Exception as exc:
+                print(f"push: digest failed: {exc}")
         time.sleep(interval)

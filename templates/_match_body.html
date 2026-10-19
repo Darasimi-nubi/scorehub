@@ -10,7 +10,7 @@
   <div class="board">
     <div class="side">
       {% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}
-      <span>{{ m.home }}</span>
+      <a class="tlink" href="{{ url_for('team_page', key=team_key(m.home)) }}"><span>{{ m.home }}</span></a>
       {% if m.sport == 'cricket' and m.home_score is not none %}<em class="cscore">{{ m.home_score }}</em>{% endif %}
     </div>
     <div class="mid">
@@ -31,7 +31,7 @@
     </div>
     <div class="side">
       {% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}
-      <span>{{ m.away }}</span>
+      <a class="tlink" href="{{ url_for('team_page', key=team_key(m.away)) }}"><span>{{ m.away }}</span></a>
       {% if m.sport == 'cricket' and m.away_score is not none %}<em class="cscore">{{ m.away_score }}</em>{% endif %}
     </div>
   </div>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} – fixtures and results – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="{{ name }} fixtures, results and live scores on ScoreHub.">
+  {% if not indexable %}<meta name="robots" content="noindex">{% endif %}{% endblock %}
+{% macro mline(m) %}
+<div class="mrow {{ m.status }}">
+  <a class="mlink mline" href="{{ match_url(m) }}">
+    <span class="mwhen"><span class="kday" data-utc="{{ m.kickoff }}">{{ m.kickoff[:10] }}</span>{% if m.status == 'live' %} <span class="live-dot"></span>{{ m.clock or m.period }}{% endif %}</span>
+    <span class="mteams"><b>{{ m.home }} v {{ m.away }}</b><small>{{ m.league }}</small></span>
+    <span class="mscore">{% if m.home_score is not none and m.status != 'scheduled' %}{{ m.home_score }}–{{ m.away_score }}{% else %}<span class="kick" data-utc="{{ m.kickoff }}">{{ m.kickoff[11:16] }}</span>{% endif %}</span>
+  </a>
+</div>
+{% endmacro %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <div class="pcard">
+    {% if crest %}<img src="{{ crest }}" alt="" width="72" height="72" style="border-radius:12px;background:none;object-fit:contain">{% endif %}
+    <div>
+      <h1>{{ name }}</h1>
+      {% if leagues %}<p class="muted">{{ leagues|join(' · ') }}</p>{% endif %}
+      {% if sport == 'football' %}<button type="button" class="follow-btn" data-key="{{ key }}" data-name="{{ name }}" aria-pressed="false"><span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span></button>{% endif %}
+    </div>
+  </div>
+
+  {% if not has_matches %}
+  <p class="empty">No recent or upcoming matches found for {{ name }} right now.</p>
+  {% endif %}
+  {% if upcoming %}<h2>Next matches</h2><div class="tmatches">{% for m in upcoming %}{{ mline(m) }}{% endfor %}</div>{% endif %}
+  {% if results %}<h2>Recent results</h2><div class="tmatches">{% for m in results %}{{ mline(m) }}{% endfor %}</div>{% endif %}
+  {% if sport == 'football' %}<p class="muted small">Follow {{ name }} to get alerts for its goals, kick-off, full time and a morning summary on match days.</p>{% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll(".kick").forEach(function (el) { var d = new Date(el.dataset.utc); if (!isNaN(d)) el.textContent = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); });
+  document.querySelectorAll(".kday").forEach(function (el) { var d = new Date(el.dataset.utc); if (!isNaN(d)) el.textContent = d.toLocaleDateString([], {weekday: "short", day: "numeric", month: "short"}); });
+</script>
+{% endblock %}

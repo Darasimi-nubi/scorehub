@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Predictions leaderboard – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="Predict football results and climb the ScoreHub leaderboard.">{% endblock %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <h1>Predictions</h1>
+  <p class="muted">Open any upcoming football match and pick a home win, a draw or an away win before kick-off.
+  Every correct pick earns {{ points }} points. Picks lock at kick-off.</p>
+
+  <div class="me" id="me">
+    <h2>Your name</h2>
+    <p class="muted small" id="meStats">Pick a nickname to appear on the leaderboard.</p>
+    <form id="nickForm" class="soundrow">
+      <input id="nick" maxlength="20" placeholder="Nickname (3–20 letters or numbers)" autocomplete="off" aria-label="Nickname">
+      <button type="submit">Save</button>
+    </form>
+    <p class="muted small" id="nickMsg" hidden></p>
+  </div>
+
+  <div class="tabs2" role="tablist">
+    <button type="button" class="tab2 on" data-t="week">This week</button>
+    <button type="button" class="tab2" data-t="all">All time</button>
+  </div>
+  {% for key, rows in (('week', week), ('all', alltime)) %}
+  <div class="board" data-board="{{ key }}"{% if key == 'all' %} hidden{% endif %}>
+    {% if rows %}
+    <ol class="lb">
+      {% for nick, pts, correct, played in rows %}
+      <li><span class="rk">{{ loop.index }}</span><span class="nm">{{ nick }}</span>
+        <span class="sc">{{ pts }} pts<small>{{ correct }}/{{ played }} right</small></span></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="empty">No scored predictions yet. Be the first: make a pick, set a nickname, and check back after the match.</p>{% endif %}
+  </div>
+  {% endfor %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var P = window.ScoreHubPredict;
+  var uid = P.uid();
+  var stats = document.getElementById("meStats"), nick = document.getElementById("nick"), msg = document.getElementById("nickMsg");
+  function say(t) { msg.textContent = t || ""; msg.hidden = !t; }
+  fetch("/api/predict/me?uid=" + uid).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.nick) nick.value = d.nick;
+    if (d.stats) stats.textContent = (d.nick ? d.nick + ": " : "") + d.stats.points + " points · " + d.stats.correct + " of " + d.stats.played +
+      " scored picks right" + (d.stats.pending ? " · " + d.stats.pending + " waiting for a result" : "") +
+      (d.nick ? "" : ". Pick a nickname to appear on the leaderboard.");
+  }).catch(function () {});
+  document.getElementById("nickForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    fetch("/api/predict/nick", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({uid: uid, nick: nick.value})})
+      .then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); })
+      .then(function (x) {
+        if (x[0]) say("Saved. You'll appear on the leaderboard after your first scored pick.");
+        else say(x[1].error === "taken" ? "That nickname is taken. Try another." : x[1].error === "slow" ? "Too fast. Wait a moment." :
+                 "Use 3–20 letters, numbers, spaces, dots, dashes or underscores, starting with a letter or number.");
+      }).catch(function () { say("Couldn't save right now. Try again."); });
+  });
+  document.querySelectorAll(".tab2").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll(".tab2").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll(".board").forEach(function (x) { x.hidden = x.dataset.board !== b.dataset.t; });
+    });
+  });
+})();
+</script>
+{% endblock %}
