@@ -49,6 +49,17 @@
       <input class="cal-input" id="calInput" type="date" value="{{ day }}" min="{{ nav.min }}" max="{{ nav.max }}" tabindex="-1" aria-hidden="true">
     </div>
 
+    {% if not league and not live and (sport == 'all' or sport == 'football') %}
+    <a class="se-strip" href="{{ url_for('super_eagles_page') }}">
+      <span class="se-ttl">&#127475;&#127468; Super Eagles</span>
+      {% if se %}
+      <span class="se-next">{{ 'Playing now:' if se.status == 'live' else 'Next:' }} <b>{{ se.home }} v {{ se.away }}</b>
+        {% if se.status == 'live' %}<span class="live-dot"></span>{{ se.home_score }}–{{ se.away_score }}{% else %}<span class="se-when" data-utc="{{ se.kickoff }}"></span>{% endif %}</span>
+      {% else %}<span class="se-next">Fixtures, results and history</span>{% endif %}
+      <span class="chev" aria-hidden="true">&rsaquo;</span>
+    </a>
+    {% endif %}
+
     {% if league and table_code(league) %}
     <a class="tablelink" href="{{ url_for('table_page', code=table_code(league)) }}">{{ league }} table</a>
     {% endif %}
@@ -77,6 +88,10 @@
 
     // Kickoff times in the viewer's local time.
     function localiseTimes() {
+      document.querySelectorAll(".se-when").forEach(function (el) {
+        var d = new Date(el.dataset.utc);
+        if (!isNaN(d)) el.textContent = d.toLocaleString([], {weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+      });
       document.querySelectorAll(".kday").forEach(function (el) {
         var d = new Date(el.dataset.utc);
         if (!isNaN(d)) el.textContent = d.toLocaleDateString([], {weekday: "short", day: "numeric", month: "short"});

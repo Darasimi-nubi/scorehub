@@ -562,6 +562,21 @@ def initials(name):
 app.jinja_env.globals.update(badge_hue=badge_hue, initials=initials)
 
 
+def _super_eagles_next():
+    """Nigeria's live or next match, for the shortcut at the top of the scores page (None when there isn't one)."""
+    hits = _team_rows("nigeria")
+    if not hits:
+        return None
+    ids = [h["id"] for h in hits]
+    marks = ",".join("?" * len(ids))
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    rows = get_db().execute(MATCH_SQL + f" WHERE (m.home_id IN ({marks}) OR m.away_id IN ({marks})) AND m.kickoff >= ? AND m.kickoff <= ?"
+                            " AND m.status != 'postponed' ORDER BY m.kickoff LIMIT 3",
+                            (*ids, *ids, (now - timedelta(hours=3)).isoformat(), (now + timedelta(days=30)).isoformat())).fetchall()
+    rows = decorate(rows)
+    return next((m for m in rows if m["status"] in ("live", "scheduled")), None)
+
+
 @app.route("/")
 @cached_page(5)
 def index():
@@ -569,7 +584,7 @@ def index():
     return render_template("index.html", groups=load_groups(sport, day, league, offset, live),
                            sport=sport, day=day, league=league, live=live,
                            live_count=live_count(sport), nav=day_nav(day, offset),
-                           leagues=league_chips(sport))
+                           leagues=league_chips(sport), se=_super_eagles_next())
 
 
 @app.route("/partial/myteams")
