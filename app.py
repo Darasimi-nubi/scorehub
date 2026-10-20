@@ -437,6 +437,15 @@ app.jinja_env.globals["match_url"] = match_url
 app.jinja_env.globals["team_key"] = matchlinks.team_key
 app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
+
+# Adsterra banners (320x50 on phones, 728x90 on desktop). Turn them all off by setting ADSTERRA_ENABLED=0 in Railway.
+ADSTERRA = {
+    "enabled": os.environ.get("ADSTERRA_ENABLED", "1") != "0",
+    "mobile": (os.environ.get("ADSTERRA_MOBILE_KEY") or "27b0f73db26f75e0367af25f95b250e9").strip(),
+    "desktop": (os.environ.get("ADSTERRA_DESKTOP_KEY") or "").strip(),  # leave empty until the 728x90 unit exists
+    "host": (os.environ.get("ADSTERRA_HOST") or "https://bauval.org/22/").strip(),
+}
+app.jinja_env.globals["adsterra"] = ADSTERRA
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
 

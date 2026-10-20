@@ -65,6 +65,18 @@
     </div>
   </header>
   {% block body %}{% endblock %}
+  {% block adslot %}{% if adsterra.enabled and adsterra.mobile and not lite %}
+  <div class="wrap ad-slot" style="display:flex;justify-content:center;margin:18px auto;min-height:50px;overflow:hidden">
+    <script>
+      (function () {
+        var big = window.innerWidth >= 768 && "{{ adsterra.desktop }}";
+        var key = big ? "{{ adsterra.desktop }}" : "{{ adsterra.mobile }}";
+        window.atOptions = {key: key, format: "iframe", height: big ? 90 : 50, width: big ? 728 : 320, params: {}};
+        document.write('<scr' + 'ipt src="{{ adsterra.host }}' + key + '"></scr' + 'ipt>');
+      })();
+    </script>
+  </div>
+  {% endif %}{% endblock %}
   <footer class="site-footer">
     <div class="wrap">
       <nav><a href="{{ url_for('super_eagles_page') }}">Super Eagles</a><a href="{{ url_for('guides_page') }}">Guides</a><a href="{{ url_for('about_page') }}">About</a><a href="{{ url_for('privacy_page') }}">Privacy</a><a href="{{ url_for('terms_page') }}">Terms</a><a href="{{ url_for('contact_page') }}">Contact</a><button type="button" class="lite-toggle" id="liteToggle" aria-pressed="{{ 'true' if lite else 'false' }}">Data saver: {{ 'on' if lite else 'off' }}</button><button type="button" class="theme-toggle" id="themeToggle">Theme: Auto</button></nav>
