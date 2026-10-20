@@ -23,6 +23,11 @@ API_FOOTBALL_KEY = os.environ.get("API_FOOTBALL_KEY")
 
 # Google AdSense publisher id (looks like ca-pub-1234567890123456); leave unset to show no ads.
 ADSENSE_CLIENT = (os.environ.get("ADSENSE_CLIENT") or "").strip()
+# Adsterra 320x50 banner (shown on the scores page and guides, never on match pages or in data-saver mode).
+# Set ADSTERRA_BANNER=0 in Railway to switch it off; ADSTERRA_BANNER_KEY / ADSTERRA_BANNER_SRC override the defaults.
+ADSTERRA_KEY = (os.environ.get("ADSTERRA_BANNER_KEY") or "27b0f73db26f75e0367af25f95b250e9").strip()
+ADSTERRA_SRC = (os.environ.get("ADSTERRA_BANNER_SRC") or f"https://bauval.org/22/{ADSTERRA_KEY}").strip()
+ADSTERRA_ON = os.environ.get("ADSTERRA_BANNER", "1") != "0" and bool(ADSTERRA_KEY)
 # Public contact address shown on the Contact page (use an address you are happy to publish).
 CONTACT_EMAIL = (os.environ.get("CONTACT_EMAIL") or "").strip()
 SITE_URL = (os.environ.get("SITE_URL") or "https://scorehubber.name.ng").rstrip("/")
@@ -437,15 +442,7 @@ app.jinja_env.globals["match_url"] = match_url
 app.jinja_env.globals["team_key"] = matchlinks.team_key
 app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
-
-# Adsterra banners (320x50 on phones, 728x90 on desktop). Turn them all off by setting ADSTERRA_ENABLED=0 in Railway.
-ADSTERRA = {
-    "enabled": os.environ.get("ADSTERRA_ENABLED", "1") != "0",
-    "mobile": (os.environ.get("ADSTERRA_MOBILE_KEY") or "27b0f73db26f75e0367af25f95b250e9").strip(),
-    "desktop": (os.environ.get("ADSTERRA_DESKTOP_KEY") or "e5dc1ce3f73842ae51960f62d8b342ea").strip(),  # 728x90 banner
-    "host": (os.environ.get("ADSTERRA_HOST") or "https://bauval.org/22/").strip(),
-}
-app.jinja_env.globals["adsterra"] = ADSTERRA
+app.jinja_env.globals.update(adsterra_on=ADSTERRA_ON, adsterra_key=ADSTERRA_KEY, adsterra_src=ADSTERRA_SRC)
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
 

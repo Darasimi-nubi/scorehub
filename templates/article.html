@@ -10,5 +10,6 @@
   {% for kind, text in blocks %}{% if kind == 'h' %}<h2>{{ text }}</h2>{% else %}<p>{{ text }}</p>{% endif %}{% endfor %}
   <h2>More guides</h2>
   <ul class="glist">{% for k, t in others %}<li><a href="{{ url_for('article_page', slug=k) }}"><b>{{ t }}</b></a></li>{% endfor %}</ul>
+{% include "_banner.html" %}
 </main>
 {% endblock %}

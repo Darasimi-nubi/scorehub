@@ -1,0 +1,6 @@
+{% if adsterra_on and not lite %}
+<aside class="ad-slot" aria-label="Advertisement"><small>Advertisement</small>
+<script>atOptions = {'key': '{{ adsterra_key }}', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {}};</script>
+<script src="{{ adsterra_src }}"></script>
+</aside>
+{% endif %}

@@ -502,3 +502,7 @@ html[data-theme="light"] .pname small { color: #fff; }
 /* theme switch in the footer */
 .theme-toggle { margin-left: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line, #2a2a2a); background: none; color: inherit; font: inherit; font-size: .85rem; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--accent); }
+
+/* ad banner */
+.ad-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 22px auto 8px; min-height: 66px; max-width: 100%; overflow: hidden; }
+.ad-slot small { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

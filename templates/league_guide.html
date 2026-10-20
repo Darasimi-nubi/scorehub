@@ -23,5 +23,6 @@
   </ul>
   <script>document.querySelectorAll(".kday").forEach(function(el){var d=new Date(el.dataset.utc);if(!isNaN(d))el.textContent=d.toLocaleString([], {weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});});</script>
   {% endif %}
+{% include "_banner.html" %}
 </main>
 {% endblock %}

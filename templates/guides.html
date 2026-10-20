@@ -15,5 +15,6 @@
   <ul class="glist">
     {% for k, g in leagues.items() %}<li><a href="{{ url_for('league_page', slug=k) }}"><b>{{ g.title }}</b><span>{{ g.country }}</span></a></li>{% endfor %}
   </ul>
+{% include "_banner.html" %}
 </main>
 {% endblock %}
