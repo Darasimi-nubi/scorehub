@@ -442,7 +442,7 @@ app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
 ADSTERRA = {
     "enabled": os.environ.get("ADSTERRA_ENABLED", "1") != "0",
     "mobile": (os.environ.get("ADSTERRA_MOBILE_KEY") or "27b0f73db26f75e0367af25f95b250e9").strip(),
-    "desktop": (os.environ.get("ADSTERRA_DESKTOP_KEY") or "").strip(),  # leave empty until the 728x90 unit exists
+    "desktop": (os.environ.get("ADSTERRA_DESKTOP_KEY") or "e5dc1ce3f73842ae51960f62d8b342ea").strip(),  # 728x90 banner
     "host": (os.environ.get("ADSTERRA_HOST") or "https://bauval.org/22/").strip(),
 }
 app.jinja_env.globals["adsterra"] = ADSTERRA
