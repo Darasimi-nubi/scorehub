@@ -31,6 +31,7 @@ import card  # share-preview pictures
 import matchlinks  # permanent match ids and readable links
 import content  # written league guides and explainers
 import predict  # match predictions and the leaderboard
+import espnlive  # real-time football scores from ESPN, so API-Football's daily allowance lasts
 import push  # goal notifications (after load_env, so it sees the VAPID keys)
 import highlights  # match highlight videos (YOUTUBE_API_KEY)
 
@@ -215,10 +216,17 @@ def decorate(rows):
     """
     rows = [dict(r) for r in rows]
     football = [r for r in rows if r["sport"] == "football"]
-    if API_FOOTBALL_KEY and football:
-        import apifootball
-        apifootball.overlay_live(football, API_FOOTBALL_KEY)
-        apifootball.settle_past(football, API_FOOTBALL_KEY)
+    if football:
+        try:
+            answered = espnlive.overlay(football)  # free: ESPN answers for the big competitions
+        except Exception as exc:
+            print(f"espn-live: overlay failed: {exc}")
+            answered = set()
+        rest = [r for r in football if r["id"] not in answered]
+        if API_FOOTBALL_KEY and rest:  # whatever ESPN couldn't answer for goes to API-Football as before
+            import apifootball
+            apifootball.overlay_live(rest, API_FOOTBALL_KEY)
+            apifootball.settle_past(rest, API_FOOTBALL_KEY)
     now = datetime.now(timezone.utc)
     for r in rows:
         limit = {"basketball": 4.5, "hockey": 4.5, "tennis": 9}.get(r["sport"])  # hours; cricket Tests last days
@@ -1011,10 +1019,14 @@ def start_push():
         return
     import threading
     push.DIGEST_ROWS = _rows_for_digest
-    if API_FOOTBALL_KEY:
-        import apifootball
-        push.SCORER_LOOKUP = lambda row, side: apifootball.latest_goal(
-            row, API_FOOTBALL_KEY, side, int(row.get("home_score" if side == "home" else "away_score") or 0))
+    def _scorer(row, side):
+        nth = int(row.get("home_score" if side == "home" else "away_score") or 0)
+        found = espnlive.latest_goal(row, side, nth)  # free, tried first
+        if not found and API_FOOTBALL_KEY:
+            import apifootball
+            found = apifootball.latest_goal(row, API_FOOTBALL_KEY, side, nth)
+        return found
+    push.SCORER_LOOKUP = _scorer
     threading.Thread(target=push.run, args=(_rows_for_push,), daemon=True).start()
 
 
