@@ -465,3 +465,40 @@ html.lite body { font-family: system-ui, "Segoe UI", sans-serif; }
 .se-next b { color: var(--text); }
 .se-when { margin-left: 6px; color: #6fe3a3; font-weight: 600; }
 .se-strip .chev { color: var(--muted); font-size: 1.3rem; }
+
+/* ---------- light theme (the page script sets data-theme to "light" or "dark"; Auto follows the device) ---------- */
+html[data-theme="light"] {
+  --bg: #f4f6f9; --panel: #ffffff; --card: #ffffff; --card-hover: #eef1f5; --line: #dde2ea;
+  --text: #15191f; --muted: #5d6675; --accent: #d9930f; --live: #e0243a;
+  color-scheme: light;
+}
+html[data-theme="light"] .pills a.on, html[data-theme="light"] .live-btn.on { background: #15191f; color: #fff; }
+html[data-theme="light"] .arrow.off { color: #b7bec9; }
+html[data-theme="light"] .star { color: #a4acb8; }
+html[data-theme="light"] .tabbtn { color: #5d6675; }
+html[data-theme="light"] .tabbtn.tab-active { color: #15191f; border-bottom-color: #15191f; }
+html[data-theme="light"] .empty, html[data-theme="light"] .tl-min, html[data-theme="light"] .tl-txt em, html[data-theme="light"] .tl-txt small,
+html[data-theme="light"] .tl-div, html[data-theme="light"] .h2h-tally span, html[data-theme="light"] .h2h-sub,
+html[data-theme="light"] .h2h-date, html[data-theme="light"] .hl-meta, html[data-theme="light"] .hl-note,
+html[data-theme="light"] .install-x { color: #5d6675; }
+html[data-theme="light"] .tl-div b { color: #15191f; }
+html[data-theme="light"] .tl-row, html[data-theme="light"] .h2h-row { border-bottom-color: rgba(0,0,0,.08); }
+html[data-theme="light"] .tl-div { background: rgba(0,0,0,.04); }
+html[data-theme="light"] .h2h-tally .hd b { background: #8a929e; }
+html[data-theme="light"] .bell { background: rgba(0,0,0,.07); color: #333; }
+html[data-theme="light"] .hl-btn:hover, html[data-theme="light"] .share-btn:hover, html[data-theme="light"] .wa-btn:hover,
+html[data-theme="light"] .follow-btn:hover { background: rgba(0,0,0,.05); }
+html[data-theme="light"] .site-footer, html[data-theme="light"] .doc .updated { color: #5d6675; }
+html[data-theme="light"] .site-footer a { color: #3d4654; }
+html[data-theme="light"] .site-footer a:hover { color: #000; }
+html[data-theme="light"] .doc p, html[data-theme="light"] .doc li { color: #2c333d; }
+html[data-theme="light"] .wa-btn { border-color: #1f8a5a; color: #12714a; }
+html[data-theme="light"] .p-btn { background: rgba(0,0,0,.03); }
+html[data-theme="light"] .next-up, html[data-theme="light"] .se-strip { background: linear-gradient(135deg, rgba(0,135,81,.14), rgba(0,0,0,.02)); }
+html[data-theme="light"] .next-up .count, html[data-theme="light"] .se-when { color: #0b7a4b; }
+html[data-theme="light"] .sub-on, html[data-theme="light"] .tl-ico.sub { color: #12905a; }
+html[data-theme="light"] .install-bar, html[data-theme="light"] [class*="install"][style] { background: #fff; }
+html[data-theme="light"] .pname small { color: #fff; }
+/* theme switch in the footer */
+.theme-toggle { margin-left: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line, #2a2a2a); background: none; color: inherit; font: inherit; font-size: .85rem; cursor: pointer; }
+.theme-toggle:hover { border-color: var(--accent); }

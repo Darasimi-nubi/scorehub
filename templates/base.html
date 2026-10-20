@@ -20,6 +20,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
   {% endif %}
+  <script>
+    window.ScoreHubTheme = {apply: function () {
+      var c = "auto"; try { c = localStorage.getItem("scorehub:theme") || "auto"; } catch (e) {}
+      var t = c === "auto" ? (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : c;
+      document.documentElement.setAttribute("data-theme", t);
+      var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", t === "light" ? "#ffffff" : "#0d0d12");
+    }};
+    window.ScoreHubTheme.apply();
+    try { matchMedia("(prefers-color-scheme: light)").addEventListener("change", window.ScoreHubTheme.apply); } catch (e) {}
+  </script>
   <script>window.SH_LITE = {{ 'true' if lite else 'false' }};</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
@@ -57,7 +67,7 @@
   {% block body %}{% endblock %}
   <footer class="site-footer">
     <div class="wrap">
-      <nav><a href="{{ url_for('super_eagles_page') }}">Super Eagles</a><a href="{{ url_for('guides_page') }}">Guides</a><a href="{{ url_for('about_page') }}">About</a><a href="{{ url_for('privacy_page') }}">Privacy</a><a href="{{ url_for('terms_page') }}">Terms</a><a href="{{ url_for('contact_page') }}">Contact</a><button type="button" class="lite-toggle" id="liteToggle" aria-pressed="{{ 'true' if lite else 'false' }}">Data saver: {{ 'on' if lite else 'off' }}</button></nav>
+      <nav><a href="{{ url_for('super_eagles_page') }}">Super Eagles</a><a href="{{ url_for('guides_page') }}">Guides</a><a href="{{ url_for('about_page') }}">About</a><a href="{{ url_for('privacy_page') }}">Privacy</a><a href="{{ url_for('terms_page') }}">Terms</a><a href="{{ url_for('contact_page') }}">Contact</a><button type="button" class="lite-toggle" id="liteToggle" aria-pressed="{{ 'true' if lite else 'false' }}">Data saver: {{ 'on' if lite else 'off' }}</button><button type="button" class="theme-toggle" id="themeToggle">Theme: Auto</button></nav>
       <p>&copy; ScoreHub. Live scores, results and tables for football, basketball, hockey, tennis and cricket.</p>
     </div>
   </footer>
@@ -66,6 +76,7 @@
   <script src="{{ url_for('static', filename='predict.js') }}"></script>
   <script src="{{ url_for('static', filename='push.js') }}"></script>
   <script src="{{ url_for('static', filename='lite.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
   {% if not lite %}<script src="{{ url_for('static', filename='install.js') }}" defer></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>
