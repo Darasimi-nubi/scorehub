@@ -571,7 +571,7 @@ def _super_eagles_next():
     marks = ",".join("?" * len(ids))
     now = datetime.now(timezone.utc).replace(microsecond=0)
     rows = get_db().execute(MATCH_SQL + f" WHERE (m.home_id IN ({marks}) OR m.away_id IN ({marks})) AND m.kickoff >= ? AND m.kickoff <= ?"
-                            " AND m.status != 'postponed' ORDER BY m.kickoff LIMIT 3",
+                            " AND m.status != 'postponed' AND l.sport = 'football' ORDER BY m.kickoff LIMIT 3",
                             (*ids, *ids, (now - timedelta(hours=3)).isoformat(), (now + timedelta(days=30)).isoformat())).fetchall()
     rows = decorate(rows)
     return next((m for m in rows if m["status"] in ("live", "scheduled")), None)
@@ -792,17 +792,20 @@ def _team_rows(key):
     return [r for r in get_db().execute("SELECT id, name, crest FROM teams").fetchall() if matchlinks.team_key(r["name"]) == key]
 
 
-def _team_matches(hits):
+def _team_matches(hits, sport=None):
     """(upcoming, results) for a team's database records: the next few matches and the last finished ones."""
     ids = [h["id"] for h in hits]
     marks = ",".join("?" * len(ids))
     now = datetime.now(timezone.utc).replace(microsecond=0)
     db = get_db()
     where = f" WHERE (m.home_id IN ({marks}) OR m.away_id IN ({marks}))"
-    upcoming = decorate(db.execute(MATCH_SQL + where + " AND m.kickoff >= ? ORDER BY m.kickoff LIMIT 6",
-                                   (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
-    past = decorate(db.execute(MATCH_SQL + where + " AND m.kickoff < ? ORDER BY m.kickoff DESC LIMIT 10",
-                               (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
+    extra, args = ("", ())
+    if sport:  # "Nigeria" is also a cricket team name, so the Super Eagles hub asks for football only
+        extra, args = " AND l.sport = ?", (sport,)
+    upcoming = decorate(db.execute(MATCH_SQL + where + extra + " AND m.kickoff >= ? ORDER BY m.kickoff LIMIT 6",
+                                   (*ids, *ids, *args, (now - timedelta(hours=3)).isoformat())).fetchall())
+    past = decorate(db.execute(MATCH_SQL + where + extra + " AND m.kickoff < ? ORDER BY m.kickoff DESC LIMIT 10",
+                               (*ids, *ids, *args, (now - timedelta(hours=3)).isoformat())).fetchall())
     return upcoming, [m for m in past if m["status"] == "finished"][:8]
 
 
@@ -825,7 +828,7 @@ def team_page(key):
 @app.route("/super-eagles")
 def super_eagles_page():
     hits = _team_rows("nigeria")
-    upcoming, results = _team_matches(hits) if hits else ([], [])
+    upcoming, results = _team_matches(hits, "football") if hits else ([], [])
     crest = next((h["crest"] for h in hits if h["crest"]), None)
     nxt = next((m for m in upcoming if m["status"] in ("scheduled", "live")), None)
     return render_template("super_eagles.html", upcoming=upcoming, results=results, crest=crest, nxt=nxt)
