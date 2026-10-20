@@ -97,7 +97,7 @@ def cached_page(seconds):
 
         @wraps(view)
         def inner(*args, **kwargs):
-            key = (request.path, request.query_string, request.cookies.get("tz", "0"))
+            key = (request.path, request.query_string, request.cookies.get("tz", "0"), request.cookies.get("lite") == "1")
             hit = _page_cache.get(key)
             if hit and time.time() - hit[0] < seconds:
                 return hit[1]
@@ -725,6 +725,14 @@ def player_page(pid):
 # Pages with little text stay reachable but are not listed, linked or put in the sitemap: thin pages hurt more than they help.
 MIN_GUIDE_WORDS = 100
 LEAGUES_LISTED = {k: g for k, g in content.LEAGUES.items() if len(" ".join(g["body"]).split()) >= MIN_GUIDE_WORDS}
+
+
+@app.context_processor
+def inject_lite():
+    """Data-saver mode: pages without crest pictures, web fonts or auto-loading video, and slower refreshing."""
+    return {"lite": request.cookies.get("lite") == "1"}
+
+
 LEAGUE_GUIDE = {name: slug for slug, g in LEAGUES_LISTED.items() for name in g["names"]}
 app.jinja_env.globals["league_guide"] = lambda name: LEAGUE_GUIDE.get(name)
 
@@ -769,13 +777,8 @@ def _team_rows(key):
     return [r for r in get_db().execute("SELECT id, name, crest FROM teams").fetchall() if matchlinks.team_key(r["name"]) == key]
 
 
-@app.route("/team/<key>")
-def team_page(key):
-    if not re.fullmatch(r"[a-z0-9-]{1,60}", key):
-        abort(404)
-    hits = _team_rows(key)
-    if not hits:
-        abort(404)
+def _team_matches(hits):
+    """(upcoming, results) for a team's database records: the next few matches and the last finished ones."""
     ids = [h["id"] for h in hits]
     marks = ",".join("?" * len(ids))
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -785,13 +788,32 @@ def team_page(key):
                                    (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
     past = decorate(db.execute(MATCH_SQL + where + " AND m.kickoff < ? ORDER BY m.kickoff DESC LIMIT 10",
                                (*ids, *ids, (now - timedelta(hours=3)).isoformat())).fetchall())
-    results = [m for m in past if m["status"] == "finished"][:8]
+    return upcoming, [m for m in past if m["status"] == "finished"][:8]
+
+
+@app.route("/team/<key>")
+def team_page(key):
+    if not re.fullmatch(r"[a-z0-9-]{1,60}", key):
+        abort(404)
+    hits = _team_rows(key)
+    if not hits:
+        abort(404)
+    upcoming, results = _team_matches(hits)
     best = next((h for h in hits if h["crest"]), hits[0])
     name = min((h["name"] for h in hits), key=len) if len(hits) > 1 else hits[0]["name"]
     leagues = sorted({m["league"] for m in upcoming + results})
     sport = (upcoming + results)[0]["sport"] if upcoming + results else "football"
     return render_template("team.html", key=key, name=name, crest=best["crest"], upcoming=upcoming, results=results,
                            leagues=leagues, sport=sport, has_matches=bool(upcoming or results), indexable=INDEX_TEAM_PAGES)
+
+
+@app.route("/super-eagles")
+def super_eagles_page():
+    hits = _team_rows("nigeria")
+    upcoming, results = _team_matches(hits) if hits else ([], [])
+    crest = next((h["crest"] for h in hits if h["crest"]), None)
+    nxt = next((m for m in upcoming if m["status"] in ("scheduled", "live")), None)
+    return render_template("super_eagles.html", upcoming=upcoming, results=results, crest=crest, nxt=nxt)
 
 
 _last_settle = [0.0]
@@ -942,7 +964,7 @@ def sitemap_xml():
         ((now - timedelta(days=3)).isoformat(), (now + timedelta(days=3)).isoformat())).fetchall()
     paths += [f"/match/{r['slug']}" for r in rows]
     paths += [f"/team/{k}" for k in _sitemap_teams(now)]
-    paths += ["/guides"] + [f"/guides/{k}" for k in content.ARTICLES] + [f"/league/{k}" for k in LEAGUES_LISTED]
+    paths += ["/guides", "/super-eagles"] + [f"/guides/{k}" for k in content.ARTICLES] + [f"/league/{k}" for k in LEAGUES_LISTED]
     body = "".join(f"<url><loc>{SITE_URL}{p.replace('&', '&amp;')}</loc></url>" for p in paths)
     return Response('<?xml version="1.0" encoding="UTF-8"?>'
                     f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>',

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Super Eagles – fixtures, results and live scores – ScoreHub{% endblock %}
+{% block meta %}<meta name="description" content="Nigeria's Super Eagles: next match, live scores, recent results and the history of the team on ScoreHub.">
+  <link rel="canonical" href="{{ site_url }}{{ url_for('super_eagles_page') }}">
+  <meta property="og:title" content="Super Eagles – fixtures and results"><meta property="og:type" content="website">{% endblock %}
+{% macro mline(m) %}
+<div class="mrow {{ m.status }}">
+  <a class="mlink mline" href="{{ match_url(m) }}">
+    <span class="mwhen"><span class="kday" data-utc="{{ m.kickoff }}">{{ m.kickoff[:10] }}</span>{% if m.status == 'live' %} <span class="live-dot"></span>{{ m.clock or m.period }}{% endif %}</span>
+    <span class="mteams"><b>{{ m.home }} v {{ m.away }}</b><small>{{ m.league }}</small></span>
+    <span class="mscore">{% if m.home_score is not none and m.status != 'scheduled' %}{{ m.home_score }}–{{ m.away_score }}{% else %}<span class="kick" data-utc="{{ m.kickoff }}">{{ m.kickoff[11:16] }}</span>{% endif %}</span>
+  </a>
+</div>
+{% endmacro %}
+{% block body %}
+<main class="wrap narrow following">
+  <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
+  <div class="pcard">
+    {% if crest and not lite %}<img src="{{ crest }}" alt="" width="72" height="72" style="border-radius:12px;background:none;object-fit:contain">{% endif %}
+    <div>
+      <h1>Super Eagles</h1>
+      <p class="muted">Nigeria's national football team</p>
+      <button type="button" class="follow-btn" data-key="nigeria" data-name="Nigeria" aria-pressed="false"><span class="f-on">&#10003; Following</span><span class="f-off">+ Follow</span></button>
+    </div>
+  </div>
+
+  {% if nxt %}
+  <div class="next-up">
+    <small>{{ 'Playing now' if nxt.status == 'live' else 'Next match' }}</small>
+    <a href="{{ match_url(nxt) }}"><b>{{ nxt.home }} v {{ nxt.away }}</b></a>
+    <span class="muted">{{ nxt.league }}</span>
+    {% if nxt.status == 'scheduled' %}<span class="count" id="count" data-utc="{{ nxt.kickoff }}"></span>{% endif %}
+    <a class="share-btn" href="{{ match_url(nxt) }}">Match page &amp; predictions</a>
+  </div>
+  {% endif %}
+
+  {% if upcoming %}<h2>Fixtures</h2><div class="tmatches">{% for m in upcoming %}{{ mline(m) }}{% endfor %}</div>
+  {% elif not nxt %}<p class="empty">No Super Eagles fixtures are listed right now. They appear here as soon as the next international window is announced.</p>{% endif %}
+  {% if results %}<h2>Recent results</h2><div class="tmatches">{% for m in results %}{{ mline(m) }}{% endfor %}</div>{% endif %}
+
+  <h2>About the team</h2>
+  <p>The Super Eagles are the men's national football team of Nigeria, run by the Nigeria Football Federation (NFF). They are one of the
+  best-supported teams in Africa, and their matches draw some of the biggest television audiences in the country.</p>
+  <p>Nigeria has won the Africa Cup of Nations three times, in 1980, 1994 and 2013. At the 1996 Olympic Games in Atlanta the team won the
+  men's football gold medal, the first African team to do so. Nigeria played at its first FIFA World Cup in 1994 and has returned several times since.</p>
+  <p>Generations of fans remember players such as Rashidi Yekini, Nwankwo Kanu and Jay-Jay Okocha, who helped make the team a fixture of
+  world football in the 1990s.</p>
+
+  <h2>Competitions to follow</h2>
+  <ul class="glist">
+    <li><a href="{{ url_for('league_page', slug='afcon') }}"><b>Africa Cup of Nations guide</b><span>How the tournament works and Nigeria's record</span></a></li>
+    <li><a href="{{ url_for('article_page', slug='super-eagles-and-afcon') }}"><b>The Super Eagles and AFCON</b><span>How a national team qualifies</span></a></li>
+    <li><a href="{{ url_for('league_page', slug='npfl') }}"><b>NPFL guide</b><span>Nigeria's domestic league</span></a></li>
+    <li><a href="{{ url_for('predictions_page') }}"><b>Predictions leaderboard</b><span>Pick the Super Eagles' next result</span></a></li>
+  </ul>
+  <p class="muted small">Squad lists change often, so ScoreHub doesn't show one here. Follow Nigeria to get alerts for kick-off, goals, full time and a morning summary on match days.</p>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll(".kick").forEach(function (el) { var d = new Date(el.dataset.utc); if (!isNaN(d)) el.textContent = d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); });
+  document.querySelectorAll(".kday").forEach(function (el) { var d = new Date(el.dataset.utc); if (!isNaN(d)) el.textContent = d.toLocaleDateString([], {weekday: "short", day: "numeric", month: "short"}); });
+  (function () {
+    var el = document.getElementById("count");
+    if (!el) return;
+    var t = new Date(el.dataset.utc);
+    function tick() {
+      var ms = t - new Date();
+      if (ms <= 0) { el.textContent = "Kick-off!"; return; }
+      var d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000), m = Math.floor(ms % 3600000 / 60000);
+      el.textContent = (d ? d + "d " : "") + h + "h " + m + "m to kick-off · " + t.toLocaleString([], {weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+      setTimeout(tick, 30000);
+    }
+    tick();
+  })();
+</script>
+{% endblock %}

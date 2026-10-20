@@ -9,7 +9,7 @@
     {% if table_code(m.league) %}<a class="tbl" href="{{ url_for('table_page', code=table_code(m.league)) }}">Table →</a>{% endif %}</div>
   <div class="board">
     <div class="side">
-      {% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}
+      {% if m.home_crest and not lite %}<img src="{{ m.home_crest }}" alt="">{% endif %}
       <a class="tlink" href="{{ url_for('team_page', key=team_key(m.home)) }}"><span>{{ m.home }}</span></a>
       {% if m.sport == 'cricket' and m.home_score is not none %}<em class="cscore">{{ m.home_score }}</em>{% endif %}
     </div>
@@ -30,7 +30,7 @@
       </div>
     </div>
     <div class="side">
-      {% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}
+      {% if m.away_crest and not lite %}<img src="{{ m.away_crest }}" alt="">{% endif %}
       <a class="tlink" href="{{ url_for('team_page', key=team_key(m.away)) }}"><span>{{ m.away }}</span></a>
       {% if m.sport == 'cricket' and m.away_score is not none %}<em class="cscore">{{ m.away_score }}</em>{% endif %}
     </div>
@@ -114,14 +114,14 @@
   {% if lineups.pitch %}
   <div class="pitch">
     <div class="pitch-lines"><span class="halfway"></span><span class="centre"></span><span class="box box-t"></span><span class="box box-b"></span></div>
-    <div class="team-tag home">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="">{% endif %}<b>{{ lineups.home.formation or '' }}</b></div>
-    <div class="team-tag away">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="">{% endif %}<b>{{ lineups.away.formation or '' }}</b></div>
+    <div class="team-tag home">{% if m.home_crest and not lite %}<img src="{{ m.home_crest }}" alt="">{% endif %}<b>{{ lineups.home.formation or '' }}</b></div>
+    <div class="team-tag away">{% if m.away_crest and not lite %}<img src="{{ m.away_crest }}" alt="">{% endif %}<b>{{ lineups.away.formation or '' }}</b></div>
     {% for side in ['home', 'away'] %}
     {% for p in lineups[side].starters %}
     {% set mk = detail.marks.get(p.id|string, {}) %}
     {% set rt = detail.ratings.get(p.id|string) %}
     <div class="pl {{ side }}" style="left: {{ p.x }}%; top: {{ p.y }}%">
-      <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
+      <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo and not lite %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
         {% if mk.red %}<i class="card r" title="Red card"></i>{% elif mk.yellow %}<i class="card y" title="Yellow card"></i>{% endif %}
         {% if mk.goals %}<i class="ico goal" title="Goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
         {% if mk.og %}<i class="ico og" title="Own goal">&#9917;</i>{% endif %}
@@ -183,7 +183,7 @@
       {% set mk = detail.marks.get(p.id|string, {}) %}
       {% set rt = detail.ratings.get(p.id|string) %}
       <div class="bp {{ side }}">
-        <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
+        <span class="shirt">{{ p.number if p.number is not none else '' }}{% if p.photo and not lite %}<img class="ph" src="{{ p.photo }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
           {% if mk.red %}<i class="card r"></i>{% elif mk.yellow %}<i class="card y"></i>{% endif %}
           {% if mk.goals %}<i class="ico goal">&#9917;{% if mk.goals > 1 %}<small>{{ mk.goals }}</small>{% endif %}</i>{% endif %}
           {% if mk.on %}<i class="ico on-badge" title="Came on {{ mk.on }}">&uarr;</i>{% endif %}

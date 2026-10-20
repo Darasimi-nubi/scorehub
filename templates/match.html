@@ -110,7 +110,7 @@
       .catch(function () {});
   }
   localiseTimes();
-  timer = setInterval(refresh, 10000);
+  timer = setInterval(refresh, window.SH_LITE ? 30000 : 10000);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && timer) refresh(); });
   settle();
 </script>

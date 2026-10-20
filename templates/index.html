@@ -129,7 +129,7 @@
     function schedule() {
       clearTimeout(timer);
       // every 10 s while something is live, once a minute otherwise
-      timer = setTimeout(refresh, document.querySelector("#matches .mrow.live") ? 10000 : 60000);
+      timer = setTimeout(refresh, document.querySelector("#matches .mrow.live") ? (window.SH_LITE ? 30000 : 10000) : (window.SH_LITE ? 120000 : 60000));
     }
     function refresh() {
       if (document.hidden) { schedule(); return; }  // nobody is looking: save their data and battery

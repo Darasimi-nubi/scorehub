@@ -435,3 +435,23 @@ a.tl:hover { text-decoration: underline; }
   .main-nav::-webkit-scrollbar { display: none; }
   .main-nav a, .navbtn { font-size: .95rem; white-space: nowrap; }
 }
+
+/* ---- data saver ---- */
+.lite-toggle { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
+.lite-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.site-footer nav { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.lite-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; padding: 10px 16px; background: rgba(245,166,35,.14); border-bottom: 1px solid rgba(245,166,35,.4); font-size: .92rem; }
+.lite-bar button { border: 0; border-radius: 999px; padding: 6px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.lite-bar .yes { background: #f5a623; color: #1a1200; }
+.lite-bar .no { background: transparent; color: var(--muted); }
+.hl-lazy { display: grid; place-items: center; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; }
+.hl-load { background: #f5a623; color: #1a1200; border: 0; border-radius: 999px; padding: 10px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+html.lite body { font-family: system-ui, "Segoe UI", sans-serif; }
+
+/* ---- super eagles ---- */
+.next-up { display: grid; gap: 4px; padding: 16px; margin: 8px 0 4px; background: linear-gradient(135deg, rgba(0,135,81,.22), rgba(255,255,255,.04)); border: 1px solid rgba(0,135,81,.5); border-radius: 14px; }
+.next-up small { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; }
+.next-up b { font-size: 1.25rem; }
+.next-up a { text-decoration: none; }
+.next-up .count { font-weight: 700; color: #6fe3a3; }
+.next-up .share-btn { justify-self: start; margin-top: 6px; }

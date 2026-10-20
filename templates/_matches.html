@@ -17,8 +17,8 @@
         {% if show_date and m.status != 'live' %}<small class="kday" data-utc="{{ m.kickoff }}">{{ m.kickoff[5:10] }}</small>{% endif %}
       </div>
       <div class="tms">
-        <div class="t">{% if m.home_crest %}<img src="{{ m.home_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.home }}</span></div>
-        <div class="t">{% if m.away_crest %}<img src="{{ m.away_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.away }}</span></div>
+        <div class="t">{% if m.home_crest and not lite %}<img src="{{ m.home_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.home }}</span></div>
+        <div class="t">{% if m.away_crest and not lite %}<img src="{{ m.away_crest }}" alt="" loading="lazy" decoding="async">{% endif %}<span>{{ m.away }}</span></div>
       </div>
       <div class="sc{{ ' txt' if m.sport == 'cricket' }}">
         <b>{{ m.home_score if m.home_score is not none else '' }}</b>

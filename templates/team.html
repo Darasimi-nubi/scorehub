@@ -15,7 +15,7 @@
 <main class="wrap narrow following">
   <a class="page-back" href="{{ url_for('index') }}">&lsaquo; Scores</a>
   <div class="pcard">
-    {% if crest %}<img src="{{ crest }}" alt="" width="72" height="72" style="border-radius:12px;background:none;object-fit:contain">{% endif %}
+    {% if crest and not lite %}<img src="{{ crest }}" alt="" width="72" height="72" style="border-radius:12px;background:none;object-fit:contain">{% endif %}
     <div>
       <h1>{{ name }}</h1>
       {% if leagues %}<p class="muted">{{ leagues|join(' · ') }}</p>{% endif %}
