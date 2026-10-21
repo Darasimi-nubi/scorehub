@@ -18,6 +18,7 @@ pass it to run_forever().
 """
 import os
 import random
+import re
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
