@@ -27,6 +27,8 @@ ADSENSE_CLIENT = (os.environ.get("ADSENSE_CLIENT") or "").strip()
 # Set ADSTERRA_BANNER=0 in Railway to switch it off; ADSTERRA_BANNER_KEY / ADSTERRA_BANNER_SRC override the defaults.
 ADSTERRA_KEY = (os.environ.get("ADSTERRA_BANNER_KEY") or "27b0f73db26f75e0367af25f95b250e9").strip()
 ADSTERRA_SRC = (os.environ.get("ADSTERRA_BANNER_SRC") or f"https://bauval.org/22/{ADSTERRA_KEY}").strip()
+ADSTERRA_WIDE_KEY = (os.environ.get("ADSTERRA_WIDE_KEY") or "e5dc1ce3f73842ae51960f62d8b342ea").strip()  # 728x90, for screens 768px and wider
+ADSTERRA_WIDE_SRC = (os.environ.get("ADSTERRA_WIDE_SRC") or f"https://bauval.org/22/{ADSTERRA_WIDE_KEY}").strip()
 ADSTERRA_ON = os.environ.get("ADSTERRA_BANNER", "1") != "0" and bool(ADSTERRA_KEY)
 # Public contact address shown on the Contact page (use an address you are happy to publish).
 CONTACT_EMAIL = (os.environ.get("CONTACT_EMAIL") or "").strip()
@@ -442,7 +444,8 @@ app.jinja_env.globals["match_url"] = match_url
 app.jinja_env.globals["team_key"] = matchlinks.team_key
 app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
-app.jinja_env.globals.update(adsterra_on=ADSTERRA_ON, adsterra_key=ADSTERRA_KEY, adsterra_src=ADSTERRA_SRC)
+app.jinja_env.globals.update(adsterra_on=ADSTERRA_ON, adsterra_key=ADSTERRA_KEY, adsterra_src=ADSTERRA_SRC,
+                                 adsterra_wide_key=ADSTERRA_WIDE_KEY, adsterra_wide_src=ADSTERRA_WIDE_SRC)
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
 

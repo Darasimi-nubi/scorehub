@@ -1,6 +1,15 @@
 {% if adsterra_on and not lite %}
 <aside class="ad-slot" aria-label="Advertisement"><small>Advertisement</small>
-<script>atOptions = {'key': '{{ adsterra_key }}', 'format': 'iframe', 'height': 50, 'width': 320, 'params': {}};</script>
-<script src="{{ adsterra_src }}"></script>
+<script>
+  /* one banner per visit: 728x90 on wide screens, 320x50 on phones (each one loads only the ad that fits) */
+  (function () {
+    var wide = {% if adsterra_wide_key %}window.innerWidth >= 768{% else %}false{% endif %};
+    var big = {{ {'key': adsterra_wide_key, 'format': 'iframe', 'height': 90, 'width': 728, 'params': {}, 'src': adsterra_wide_src} | tojson }};
+    var small = {{ {'key': adsterra_key, 'format': 'iframe', 'height': 50, 'width': 320, 'params': {}, 'src': adsterra_src} | tojson }};
+    var o = wide ? big : small, src = o.src; delete o.src;
+    window.atOptions = o;
+    document.write('<scr' + 'ipt src="' + src + '"></scr' + 'ipt>');
+  })();
+</script>
 </aside>
 {% endif %}
