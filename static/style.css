@@ -507,3 +507,4 @@ html[data-theme="light"] .pname small { color: #fff; }
 .ad-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 22px auto 8px; min-height: 66px; max-width: 100%; overflow: hidden; }
 .ad-slot small { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 @media (min-width: 768px) { .ad-slot { min-height: 106px; } }
+.ad-rect { min-height: 276px !important; }
