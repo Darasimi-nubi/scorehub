@@ -1,0 +1,13 @@
+{% if adsterra_on and adsterra_side_key and not lite %}
+{# Two tall ads beside the page, only on screens wide and tall enough to have empty space there (see .ad-side in style.css) #}
+{% for side in ('left', 'right') %}
+<aside class="ad-side ad-side-{{ side }}" aria-label="Advertisement"><small>Advertisement</small>
+<script>
+  if (window.matchMedia && matchMedia("(min-width: 1340px) and (min-height: 720px)").matches) {
+    window.atOptions = {'key': '{{ adsterra_side_key }}', 'format': 'iframe', 'height': 600, 'width': 160, 'params': {}};
+    document.write('<scr' + 'ipt src="{{ adsterra_side_src }}"></scr' + 'ipt>');
+  }
+</script>
+</aside>
+{% endfor %}
+{% endif %}
