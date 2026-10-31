@@ -291,6 +291,19 @@ def share_info(m):
     return score, " ".join(f"{m['league']}: {m['home']} {score} {m['away']}. {when}. {tail}".split())
 
 
+def seo_title(m):
+    """Search-result title for a match page: both teams, what the page offers and the date (kept short for Google)."""
+    try:
+        d = datetime.fromisoformat(m["kickoff"])
+        day = f"{d.day} {d.strftime('%b %Y')}"
+    except Exception:
+        day = ""
+    score, _ = share_info(m)
+    teams = f"{m['home']} {score if score != 'v' else 'vs'} {m['away']}"
+    what = {"live": "Live Score & Stats", "finished": "Result & Highlights"}.get(m["status"], "Live Score & Line-ups")
+    return f"{teams} – {what} ({day})" if day else f"{teams} – {what}"
+
+
 def match_url(m):
     """Permanent, readable link to a match page."""
     return url_for("match_page", slug=m["slug"] or str(m["id"]))
@@ -660,7 +673,8 @@ def match_page(slug):
     back_date = (kickoff + timedelta(minutes=viewer_offset())).date().isoformat()
     share_score, share_desc = share_info(m)
     return render_template("match.html", m=m, detail=fetch_detail(m), hl=highlights.get(m),
-                           back_date=back_date, share_score=share_score, share_desc=share_desc)
+                           back_date=back_date, share_score=share_score, share_desc=share_desc,
+                           seo_title=seo_title(m))
 
 
 @app.route("/card/<slug>.png")

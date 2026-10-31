@@ -2,7 +2,7 @@
 
 {% block adhead %}{% endblock %}
 
-{% block title %}{{ m.home }} {{ share_score }} {{ m.away }} – ScoreHub{% endblock %}
+{% block title %}{{ seo_title|default(m.home ~ " " ~ share_score ~ " " ~ m.away) }}{% endblock %}
 
 {% block meta %}
   {% set page_url = site_url ~ url_for('match_page', slug=m.slug or m.id|string) %}
