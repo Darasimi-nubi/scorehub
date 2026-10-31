@@ -9,7 +9,7 @@
   <aside class="sidebar">
     <label class="search">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Search teams" autocomplete="off" aria-label="Search teams">
+      <input id="q" type="search" placeholder="Filter matches" autocomplete="off" aria-label="Filter matches">
     </label>
     <div class="comps">
       <h2>Competitions</h2>
@@ -66,7 +66,8 @@
 
     <div id="matches">{% include "_matches.html" %}</div>
     <p class="empty" id="nomatch" hidden>Nothing matches your search on this page. For "My teams", follow a team or star a match first.</p>
-  {% include "_banner.html" %}
+  {% include "_side.html" %}
+{% include "_banner.html" %}
 </main>
 </div>
 {% endblock %}

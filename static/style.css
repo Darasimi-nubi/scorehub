@@ -508,3 +508,47 @@ html[data-theme="light"] .pname small { color: #fff; }
 .ad-slot small { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 @media (min-width: 768px) { .ad-slot { min-height: 106px; } }
 .ad-rect { min-height: 276px !important; }
+
+/* tall ads beside the page: fixed to the empty space left and right of the 960px column, wide and tall screens only */
+.ad-side { display: none; }
+@media (min-width: 1340px) and (min-height: 720px) {
+  .ad-side { display: flex; flex-direction: column; align-items: center; gap: 4px; position: fixed; top: 84px; width: 160px; z-index: 5; }
+  .ad-side small { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ad-side-left { left: calc(50% - 480px - 176px); }
+  .ad-side-right { left: calc(50% + 480px + 16px); }
+}
+
+/* ---------- header search ---------- */
+.gsearch { position: relative; margin-left: auto; }
+.top-row .bell { margin-left: 0; }
+.gs-btn { display: inline-flex; align-items: center; gap: 8px; min-width: 150px; padding: 8px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); font: inherit; font-size: .95rem; cursor: pointer; }
+.gs-btn:hover { color: var(--text); border-color: var(--accent); }
+.gs-panel { position: absolute; right: 0; top: calc(100% + 8px); width: 440px; max-width: calc(100vw - 24px); z-index: 60; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.45); overflow: hidden; }
+.gs-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.gs-head input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 1.05rem; }
+.gs-close { background: none; border: 0; color: var(--muted); font-size: 1.6rem; line-height: 1; cursor: pointer; padding: 0 4px; }
+.gs-results { max-height: min(70vh, 520px); overflow-y: auto; padding: 6px 0 8px; }
+.gs-h { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px 4px; font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.gs-clear { background: none; border: 0; color: var(--accent); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.gs-item { display: flex; align-items: center; gap: 12px; padding: 8px 16px; text-decoration: none; color: var(--text); }
+.gs-item:hover, .gs-item.on { background: var(--card-hover); }
+.gs-crest { flex: 0 0 28px; width: 28px; height: 28px; object-fit: contain; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; }
+.gs-initials { background: var(--card-hover); color: var(--text); }
+.gs-ball { background: none; font-size: 1.05rem; }
+.gs-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.gs-t b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-t small { color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-when, .gs-score { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+.gs-score { color: var(--text); font-weight: 700; }
+.gs-live { font-size: .75rem; font-weight: 700; color: #fff; background: var(--live); border-radius: 999px; padding: 2px 8px; }
+.gs-players { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.gs-empty, .gs-hint { margin: 0; padding: 14px 16px; color: var(--muted); }
+html.gs-lock { overflow: visible; }
+@media (max-width: 640px) {
+  .gs-btn { min-width: 0; padding: 8px 10px; }
+  .gs-btn span { display: none; }
+  .gsearch.open .gs-panel { position: fixed; inset: 0; width: auto; max-width: none; border: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; }
+  .gsearch.open .gs-results { max-height: none; flex: 1; }
+  html.gs-lock { overflow: hidden; }
+}
+.gs-head input::-webkit-search-cancel-button, .gs-head input::-webkit-search-decoration { -webkit-appearance: none; display: none; }

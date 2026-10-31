@@ -50,6 +50,8 @@
     }).catch(function () { if (n === seq) say(TEXT.unavailable); });
   }
   q.addEventListener("input", function () { clearTimeout(t); t = setTimeout(run, 500); });
+  var pre = new URLSearchParams(window.location.search).get("q");
+  if (pre) { q.value = pre; run(); }
 })();
 </script>
 {% endif %}

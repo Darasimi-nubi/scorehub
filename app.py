@@ -31,6 +31,8 @@ ADSTERRA_WIDE_KEY = (os.environ.get("ADSTERRA_WIDE_KEY") or "e5dc1ce3f73842ae519
 ADSTERRA_WIDE_SRC = (os.environ.get("ADSTERRA_WIDE_SRC") or f"https://bauval.org/22/{ADSTERRA_WIDE_KEY}").strip()
 ADSTERRA_RECT_KEY = (os.environ.get("ADSTERRA_RECT_KEY") or "35b7731ecdc34effbafe5828f182dbd8").strip()  # 300x250, used inside guide pages
 ADSTERRA_RECT_SRC = (os.environ.get("ADSTERRA_RECT_SRC") or f"https://bauval.org/22/{ADSTERRA_RECT_KEY}").strip()
+ADSTERRA_SIDE_KEY = (os.environ.get("ADSTERRA_SIDE_KEY") or "71523731210bd2c9aa319dcb1821d669").strip()  # 160x600, beside the page on wide screens
+ADSTERRA_SIDE_SRC = (os.environ.get("ADSTERRA_SIDE_SRC") or f"https://bauval.org/22/{ADSTERRA_SIDE_KEY}").strip()
 ADSTERRA_ON = os.environ.get("ADSTERRA_BANNER", "1") != "0" and bool(ADSTERRA_KEY)
 # Public contact address shown on the Contact page (use an address you are happy to publish).
 CONTACT_EMAIL = (os.environ.get("CONTACT_EMAIL") or "").strip()
@@ -448,7 +450,8 @@ app.jinja_env.globals["site_url"] = SITE_URL
 app.jinja_env.globals["adsense_client"] = ADSENSE_CLIENT
 app.jinja_env.globals.update(adsterra_on=ADSTERRA_ON, adsterra_key=ADSTERRA_KEY, adsterra_src=ADSTERRA_SRC,
                                  adsterra_wide_key=ADSTERRA_WIDE_KEY, adsterra_wide_src=ADSTERRA_WIDE_SRC,
-                                 adsterra_rect_key=ADSTERRA_RECT_KEY, adsterra_rect_src=ADSTERRA_RECT_SRC)
+                                 adsterra_rect_key=ADSTERRA_RECT_KEY, adsterra_rect_src=ADSTERRA_RECT_SRC,
+                                 adsterra_side_key=ADSTERRA_SIDE_KEY, adsterra_side_src=ADSTERRA_SIDE_SRC)
 app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
 
@@ -940,6 +943,58 @@ def api_teams():
                     seen.add(name)
                     rows.append({"name": name, "crest": crest})
     return jsonify(teams=[{"name": r["name"], "crest": r["crest"], "key": matchlinks.team_key(r["name"])} for r in rows])
+
+
+def _clean_query(raw):
+    """Search text made safe for LIKE: no wildcards, at most 40 characters."""
+    return (raw or "").strip()[:40].replace("\\", "").replace("%", "").replace("_", "").strip()
+
+
+@app.route("/api/search")
+def api_search():
+    """Instant search for the header box: teams, competitions and matches from our own database. Players are not looked up
+    here (each one costs an API-Football request), the box offers a link to the player search instead."""
+    q = _clean_query(request.args.get("q"))
+    if len(q) < 2:
+        return jsonify(teams=[], competitions=[], matches=[])
+    if not _rate_ok("search", 120):
+        return jsonify(teams=[], competitions=[], matches=[], error="slow"), 429
+    db = get_db()
+    like, prefix = "%" + q + "%", q + "%"
+
+    seen, teams = set(), []
+    for r in db.execute("""SELECT t.name, t.crest, l.sport, l.name AS league, COUNT(*) AS c FROM teams t
+                           JOIN matches m ON t.id IN (m.home_id, m.away_id)
+                           JOIN leagues l ON l.id = m.league_id
+                           WHERE t.name LIKE ? GROUP BY t.id
+                           ORDER BY t.name LIKE ? DESC, c DESC, t.name LIMIT 30""", (like, prefix)):
+        key = (matchlinks.team_key(r["name"]), r["sport"])
+        if key in seen or not key[0]:
+            continue
+        seen.add(key)
+        teams.append({"name": r["name"], "crest": r["crest"], "sport": r["sport"], "league": r["league"],
+                      "url": url_for("team_page", key=key[0])})
+        if len(teams) == 6:
+            break
+
+    competitions = [{"name": r["name"], "country": r["country"], "sport": r["sport"],
+                     "url": url_for("index", sport=r["sport"], league=r["name"])}
+                    for r in db.execute("""SELECT DISTINCT l.name, l.country, l.sport FROM leagues l
+                                           JOIN matches m ON m.league_id = l.id
+                                           WHERE l.name LIKE ? OR l.country LIKE ?
+                                           ORDER BY l.name LIKE ? DESC, l.name LIMIT 5""", (like, like, prefix))]
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    found = [dict(r) for r in db.execute(
+        MATCH_SQL + " WHERE (h.name LIKE ? OR a.name LIKE ?) AND m.kickoff >= ? AND m.kickoff <= ? ORDER BY m.kickoff LIMIT 40",
+        (like, like, (now - timedelta(hours=48)).isoformat(), (now + timedelta(days=10)).isoformat()))]
+    live = [m for m in found if m["status"] == "live"]
+    ahead = [m for m in found if m["status"] == "scheduled"]
+    done = sorted((m for m in found if m["status"] == "finished"), key=lambda m: m["kickoff"], reverse=True)
+    matches = [{"home": m["home"], "away": m["away"], "league": m["league"], "status": m["status"], "kickoff": m["kickoff"],
+                "home_score": m["home_score"], "away_score": m["away_score"], "url": match_url(m)}
+               for m in (live + ahead + done)[:5]]
+    return jsonify(teams=teams, competitions=competitions, matches=matches)
 
 
 @app.route("/about")

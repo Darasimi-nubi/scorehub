@@ -52,6 +52,20 @@
         <a class="{{ 'on' if request.endpoint in ('players_page', 'player_page') }}" href="{{ url_for('players_page') }}">Players</a>
         {% block navextra %}{% endblock %}
       </nav>
+      <div class="gsearch" id="gsearch">
+        <button type="button" class="gs-btn" id="gsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="gsPanel" title="Search teams, competitions and matches (press /)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>Search</span>
+        </button>
+        <div class="gs-panel" id="gsPanel" role="dialog" aria-label="Search" hidden>
+          <div class="gs-head">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="gsInput" type="search" placeholder="Search teams, competitions, matches" autocomplete="off" spellcheck="false" aria-label="Search" role="combobox" aria-expanded="true" aria-controls="gsResults">
+            <button type="button" class="gs-close" id="gsClose" aria-label="Close search">&times;</button>
+          </div>
+          <div class="gs-results" id="gsResults" role="listbox" aria-label="Search results"></div>
+        </div>
+      </div>
       <button type="button" class="bell" id="bellBtn" hidden aria-pressed="false" title="Notifications for your teams and starred matches">&#128276; <span>Alerts</span></button>
     </div>
     {% set sp = sport|default('all') %}
@@ -77,6 +91,7 @@
   <script src="{{ url_for('static', filename='push.js') }}"></script>
   <script src="{{ url_for('static', filename='lite.js') }}" defer></script>
   <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='search.js') }}" defer></script>
   {% if not lite %}<script src="{{ url_for('static', filename='install.js') }}" defer></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>
