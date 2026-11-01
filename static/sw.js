@@ -26,6 +26,7 @@ self.addEventListener("push", function (event) {
         tag: d.tag,
         renotify: true,
         silent: quiet,
+        vibrate: [200, 100, 200],
         icon: "/static/icon-192.png",
         badge: "/static/icon-192.png",
         data: { url: d.url || "/" }

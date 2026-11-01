@@ -88,7 +88,7 @@ def send(sub, payload):
     from pywebpush import webpush, WebPushException
     try:
         webpush(subscription_info=sub, data=json.dumps(payload), vapid_private_key=VAPID_PRIVATE,
-                vapid_claims={"sub": VAPID_SUBJECT}, ttl=600)
+                vapid_claims={"sub": VAPID_SUBJECT}, ttl=600, headers={"Urgency": "high"})
         return True
     except WebPushException as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
